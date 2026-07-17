@@ -3550,15 +3550,17 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     const wanted = new Set(orderLinesOf(order || {}).map((l) => l.itemId));
     const grouped = new Map();
     stock
-      .filter((r) => wanted.has(r.itemId) && (readyForSale(r) || (r.status === "ALLOC" && r.allocatedFor === order?.id)))
+      .filter((r) => wanted.has(r.itemId) && ((r.status === "AVL") || (r.status === "ALLOC" && r.allocatedFor === order?.id)))
       .forEach((r) => {
         const groupKey = `${r.itemId}|${r.loc || ""}|${r.lpn || ""}|${r.batch || ""}`;
         const prev = grouped.get(groupKey) || { ...r, qty: 0, onhandQty: 0, allocatedQty: 0, sourceKeys: [], allocKeys: [] };
         if (r.status === "AVL") {
           prev.qty += Number(r.qty || 0);
           prev.onhandQty += Number(r.qty || 0);
-          prev.sourceKeys.push(stockKeyOf(r));
+          if (readyForSale(r)) prev.sourceKeys.push(stockKeyOf(r));
           prev.key = prev.key || r.key;
+          prev.canAllocate = Boolean(prev.canAllocate || readyForSale(r));
+          if (!readyForSale(r)) prev.blockReason = stickerStateOfStock(r).required && !stickerStateOfStock(r).ok ? "รอติดสติ๊กเกอร์" : "ไม่พร้อมขาย";
         }
         if (r.status === "ALLOC" && r.allocatedFor === order?.id) {
           prev.allocatedQty += Number(r.qty || 0);
@@ -3573,6 +3575,8 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
       return {
         ...r,
         remainingQty: Math.max(0, Number(r.onhandQty || 0) - Number(r.allocatedQty || 0)),
+        canAllocate: Boolean(r.canAllocate),
+        blockReason: r.blockReason || "",
         system: locOf(r.loc)?.system || "Manual",
         type: locOf(r.loc)?.type || "-",
         plant: locOf(r.loc)?.plant || "-",
@@ -3585,7 +3589,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     });
   };
   const selectedSourcePlan = (order) => {
-    const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL");
+    const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL" && r.canAllocate);
     return rows.reduce((acc, r) => {
       const key = sourcePickKey(order.id, r.itemId, r);
       if (!sourceChecked[key]) return acc;
@@ -3596,7 +3600,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   };
   const selectedSourceQty = (order) => Object.values(selectedSourcePlan(order)).flat().reduce((a, r) => a + Number(r.qty || 0), 0);
   const setSourceQty = (orderId, itemId, row, qty) => {
-    const max = Number(row.onhandQty ?? row.qty ?? 0);
+    const max = row.canAllocate ? Number(row.onhandQty ?? row.qty ?? 0) : 0;
     const clean = Math.max(0, Math.min(Number(qty || 0), max));
     const key = sourcePickKey(orderId, itemId, row);
     setSourcePick((prev) => ({ ...prev, [key]: clean }));
@@ -3605,7 +3609,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   const toggleSource = (order, row, checked) => {
     const key = sourcePickKey(order.id, row.itemId, row);
     setSourceChecked((prev) => ({ ...prev, [key]: checked }));
-    const max = Number(row.onhandQty ?? row.qty ?? 0);
+    const max = row.canAllocate ? Number(row.onhandQty ?? row.qty ?? 0) : 0;
     setSourcePick((prev) => ({ ...prev, [key]: checked ? Math.max(1, Number(prev[key] || Math.min(max, orderLinesOf(order).find((l) => l.itemId === row.itemId)?.qty || max))) : 0 }));
   };
 
@@ -3616,7 +3620,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     if (existingKeys.length) return;
     const nextPick = {};
     const nextChecked = {};
-    const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL");
+    const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL" && r.canAllocate);
     orderLinesOf(order).forEach((line) => {
       let need = Number(line.qty || 0);
       rows.filter((r) => r.itemId === line.itemId).forEach((r) => {
@@ -3648,6 +3652,27 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
 
   // ALLOCATE — reserve stock from AVL → ALLOC (tagged to this order). No robot/pick dispatch yet.
   const allocate = (order, sourcePlan = {}) => {
+    const selectedModeAtStart = Object.keys(sourcePlan || {}).some((itemId) => (sourcePlan[itemId] || []).some((s) => Number(s.qty || 0) > 0));
+    const allocatableQtyAtStart = order.items.reduce((sum, it) => {
+      if (selectedModeAtStart) {
+        const selectedRows = sourcePlan[it.itemId] || [];
+        const selectedReadyQty = selectedRows.reduce((a, sel) => {
+          const readyQty = (sel.sourceKeys || [sel.rowKey]).reduce((s, rowKey) => {
+            const row = stock.find((r) => stockKeyOf(r) === rowKey && r.itemId === it.itemId && readyForSale(r));
+            return s + Number(row?.qty || 0);
+          }, 0);
+          return a + Math.min(Number(sel.qty || 0), readyQty);
+        }, 0);
+        return sum + Math.min(Number(it.qty || 0), selectedReadyQty);
+      }
+      return sum + Math.min(Number(it.qty || 0), availRows(it.itemId).reduce((a, r) => a + Number(r.qty || 0), 0));
+    }, 0);
+    if (allocatableQtyAtStart <= 0) {
+      const needQty = order.items.reduce((a, it) => a + Number(it.qty || 0), 0);
+      notify("สินค้าไม่เพียงพอต่อคำสั่งซื้อ", `ไม่สามารถ Allocate ได้ เพราะไม่มีสินค้า Available พร้อมจ่ายสำหรับ Order นี้ · ต้องการ ${needQty} หน่วย`, "danger");
+      addTx({ type: "Allocate Blocked", detail: `${order.id}: Block Allocate เพราะสินค้า Available ไม่เพียงพอ / ไม่มี stock พร้อมจ่าย`, itemId: null });
+      return;
+    }
     const lines = [];
     const blockedWarnings = [];
     setStock((stockList) => {
@@ -3845,10 +3870,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     });
   const detailOrder = filteredOrders.find((o) => o.id === detailOrderId);
   const normalizedLinesOf = (order) => {
-    const rawLines = order?.lines?.length ? order.lines : orderLinesOf(order).map((l) => ({
-      ...l,
-      sources: stock.filter((s) => s.itemId === l.itemId).slice(0, 2).map((s) => ({ loc: s.loc, qty: Math.min(Number(l.qty || 0), s.qty), system: locOf(s.loc)?.system || "Manual", lpn: s.lpn, pickedQty: 0 })),
-    }));
+    const rawLines = order?.lines?.length ? order.lines : orderLinesOf(order).map((l) => ({ ...l, sources: [] }));
     const lineMap = new Map();
     rawLines.forEach((l) => {
       const lineKey = l.itemId;
@@ -4088,8 +4110,17 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
             const partialReadyText = p.allocatedQty > 0
               ? `Allocate ได้ ${p.allocatedQty} จาก ${p.originalQty} หน่วย · ขาด ${p.remainingQty} หน่วย · สามารถ Release Partial เพื่อส่งบางส่วนก่อนได้`
               : `Allocate ได้ 0 จาก ${p.originalQty} หน่วย · ขาด ${p.remainingQty || p.originalQty} หน่วย · ยังไม่มีสินค้าพร้อมส่งบางส่วน`;
-            const stockCheckText = hasShortage ? partialReadyText : p.allocatedQty > 0 ? `สินค้าเพียงพอสำหรับ Order นี้ · Allocate ได้ ${p.allocatedQty} / ${p.originalQty} หน่วย` : "ยังไม่ได้ Allocate";
             const selectedQty = selectedSourceQty(detailOrder);
+            const selectableOnhand = onhandRows.filter((r) => r.status === "AVL" && r.canAllocate).reduce((a, r) => a + Number(r.onhandQty || 0), 0);
+            const blockedOnhand = onhandRows.filter((r) => r.status === "AVL" && !r.canAllocate).reduce((a, r) => a + Number(r.onhandQty || 0), 0);
+            const orderNeedQty = Math.max(0, Number(p.originalQty || 0) - Number(p.allocatedQty || 0));
+            const stockCheckText = p.allocatedQty > 0
+              ? (hasShortage ? partialReadyText : `สินค้าเพียงพอสำหรับ Order นี้ · Allocate ได้ ${p.allocatedQty} / ${p.originalQty} หน่วย`)
+              : selectedQty > 0
+                ? `เลือก Allocate ได้ ${selectedQty} จาก ${p.originalQty} หน่วย${blockedOnhand ? ` · มีสินค้า ${blockedOnhand} หน่วยที่ยังไม่พร้อมขาย/รอติดสติ๊กเกอร์` : ""}`
+                : blockedOnhand > 0
+                  ? `มี Stock ${blockedOnhand} หน่วย แต่ยังไม่พร้อมขาย/รอติดสติ๊กเกอร์ จึง Allocate ไม่ได้`
+                  : "ยังไม่ได้ Allocate";
             const firstSource = lines.flatMap((l) => (l.sources || []).map((s) => ({ ...s, itemId: l.itemId }))).find(Boolean);
             const toteCount = Math.min(10, Math.max(1, Number(firstSource?.qty || 10)));
             const toteRows = Array.from({ length: toteCount }, (_, i) => ({
@@ -4116,7 +4147,8 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                     <button className="btn secondary" onClick={() => confirmAction({ title: "ยืนยัน Auto Allocate", message: `ให้ระบบเลือก Location อัตโนมัติสำหรับ ${detailOrder.id} หรือไม่`, onConfirm: () => allocate(detailOrder) })}><Lock size={12} /> Auto Allocate</button>
                     <button className="btn" onClick={() => {
                       const plan = selectedSourcePlan(detailOrder);
-                      if (!selectedQty) return notify("ยังไม่ได้เลือก Location", "กรุณาใส่จำนวนในช่อง Allocate Qty ของ Location ที่ต้องการก่อน", "danger");
+                      if (!selectedQty && selectableOnhand <= 0) return notify("สินค้าไม่เพียงพอต่อคำสั่งซื้อ", `มีสินค้าให้ Allocate เพิ่มได้ 0 / ต้องการเพิ่ม ${orderNeedQty || p.originalQty} หน่วย · กรุณาเติม Stock หรือทำ Backorder`, "danger");
+                      if (!selectedQty) return notify("ยังไม่ได้เลือก Location", "กรุณาติ๊กเลือก Location และใส่จำนวนในช่อง Allocate Qty ก่อน", "danger");
                       confirmAction({ title: "ยืนยัน Allocate ตาม Location", message: `จองสต็อกจาก Location ที่เลือก รวม ${selectedQty} หน่วย สำหรับ ${detailOrder.id} หรือไม่`, onConfirm: () => allocate(detailOrder, plan) });
                     }}><MapPinned size={12} /> Allocate Selected Location ({selectedQty})</button>
                   </>}
@@ -4131,12 +4163,12 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                     <thead><tr><th>เลือก</th><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Allocated This Order</th><th>Remaining</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
                     <tbody>
                       {onhandRows.map((r) => {
-                        const canPick = r.status === "AVL";
+                        const canPick = r.status === "AVL" && r.canAllocate;
                         const pickKey = sourcePickKey(detailOrder.id, r.itemId, r);
                         return (
                           <tr key={pickKey}>
                             <td style={{ textAlign: "center", minWidth: 54 }}>
-                              {canPick ? <input type="checkbox" checked={!!sourceChecked[pickKey]} onChange={(e) => toggleSource(detailOrder, r, e.target.checked)} /> : <span className="scan-step done">จองแล้ว</span>}
+                              {canPick ? <input type="checkbox" checked={!!sourceChecked[pickKey]} onChange={(e) => toggleSource(detailOrder, r, e.target.checked)} /> : r.status === "ALLOC" ? <span className="scan-step done">จองแล้ว</span> : <span className="scan-step" style={{ color: "var(--danger)", background: "rgba(241,91,113,.10)" }}>{r.blockReason || "Block"}</span>}
                             </td>
                             <td style={{ minWidth: 92 }}>{canPick ? <input type="number" min="0" max={r.qty} value={sourcePick[pickKey] || ""} placeholder="0" disabled={!sourceChecked[pickKey]} onChange={(e) => setSourceQty(detailOrder.id, r.itemId, r, e.target.value)} style={{ width: 72 }} /> : "-"}</td>
                             <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{r.allocatedQty}</td><td>{r.remainingQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
