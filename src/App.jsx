@@ -3525,6 +3525,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   const [filters, setFilters] = useState({ q: "", priority: "ALL", channel: "ALL", route: "ALL", region: "ALL", customer: "ALL", sortBy: "salesSentAt", sortDir: "asc" });
   const [detailOrderId, setDetailOrderId] = useState("");
   const [sourcePick, setSourcePick] = useState({});
+  const [sourceChecked, setSourceChecked] = useState({});
 
   const readyForSale = (row) => row.status === "AVL" && stickerStateOfStock(row).ok;
   const availRows = (itemId) => stock.filter((s) => s.itemId === itemId && readyForSale(s));
@@ -3570,6 +3571,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL");
     return rows.reduce((acc, r) => {
       const key = sourcePickKey(order.id, r.itemId, r);
+      if (!sourceChecked[key]) return acc;
       const qty = Math.min(Number(sourcePick[key] || 0), Number(r.qty || 0));
       if (qty > 0) acc[r.itemId] = [...(acc[r.itemId] || []), { rowKey: stockKeyOf(r), qty }];
       return acc;
@@ -3579,8 +3581,41 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   const setSourceQty = (orderId, itemId, row, qty) => {
     const max = Number(row.qty || 0);
     const clean = Math.max(0, Math.min(Number(qty || 0), max));
-    setSourcePick((prev) => ({ ...prev, [sourcePickKey(orderId, itemId, row)]: clean }));
+    const key = sourcePickKey(orderId, itemId, row);
+    setSourcePick((prev) => ({ ...prev, [key]: clean }));
+    setSourceChecked((prev) => ({ ...prev, [key]: clean > 0 }));
   };
+  const toggleSource = (order, row, checked) => {
+    const key = sourcePickKey(order.id, row.itemId, row);
+    setSourceChecked((prev) => ({ ...prev, [key]: checked }));
+    setSourcePick((prev) => ({ ...prev, [key]: checked ? Math.max(1, Number(prev[key] || Math.min(row.qty, orderLinesOf(order).find((l) => l.itemId === row.itemId)?.qty || row.qty))) : 0 }));
+  };
+
+  useEffect(() => {
+    const order = allocOrders.find((o) => o.id === detailOrderId);
+    if (!order || order.status !== "Pending") return;
+    const existingKeys = Object.keys(sourcePick).filter((k) => k.startsWith(`${order.id}|`));
+    if (existingKeys.length) return;
+    const nextPick = {};
+    const nextChecked = {};
+    const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL");
+    orderLinesOf(order).forEach((line) => {
+      let need = Number(line.qty || 0);
+      rows.filter((r) => r.itemId === line.itemId).forEach((r) => {
+        if (need <= 0) return;
+        const take = Math.min(need, Number(r.qty || 0));
+        if (take <= 0) return;
+        const key = sourcePickKey(order.id, r.itemId, r);
+        nextPick[key] = take;
+        nextChecked[key] = true;
+        need -= take;
+      });
+    });
+    if (Object.keys(nextPick).length) {
+      setSourcePick((prev) => ({ ...prev, ...nextPick }));
+      setSourceChecked((prev) => ({ ...prev, ...nextChecked }));
+    }
+  }, [detailOrderId, allocOrders, stock]);
 
   const advanceJob = (jobId, steps, onDone) => {
     let i = 0;
@@ -4073,16 +4108,17 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                 <div className="kpi-sub" style={{ marginBottom: 10 }}>แสดง Stock ทุก Location ของสินค้าใน Order นี้ ทั้ง Onhand ที่ยังจ่ายได้ และ Qty ที่ถูก Allocate ให้ Order นี้แล้ว จึงไม่หายหลังจากกด Allocate</div>
                 <div className="table-wrap" style={{ marginBottom: 14 }}>
                   <table>
-                    <thead><tr><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Allocated This Order</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
+                    <thead><tr><th>เลือก</th><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Allocated This Order</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
                     <tbody>
                       {onhandRows.map((r) => {
                         const canPick = r.status === "AVL";
                         const pickKey = sourcePickKey(detailOrder.id, r.itemId, r);
                         return (
                           <tr key={pickKey}>
-                            <td style={{ minWidth: 92 }}>
-                              {canPick ? <input type="number" min="0" max={r.qty} value={sourcePick[pickKey] || ""} placeholder="0" onChange={(e) => setSourceQty(detailOrder.id, r.itemId, r, e.target.value)} style={{ width: 72 }} /> : <span className="scan-step done">จองแล้ว</span>}
+                            <td style={{ textAlign: "center", minWidth: 54 }}>
+                              {canPick ? <input type="checkbox" checked={!!sourceChecked[pickKey]} onChange={(e) => toggleSource(detailOrder, r, e.target.checked)} /> : <span className="scan-step done">จองแล้ว</span>}
                             </td>
+                            <td style={{ minWidth: 92 }}>{canPick ? <input type="number" min="0" max={r.qty} value={sourcePick[pickKey] || ""} placeholder="0" disabled={!sourceChecked[pickKey]} onChange={(e) => setSourceQty(detailOrder.id, r.itemId, r, e.target.value)} style={{ width: 72 }} /> : "-"}</td>
                             <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{r.allocatedQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
                           </tr>
                         );
