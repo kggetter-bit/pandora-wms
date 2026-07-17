@@ -4049,53 +4049,98 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
 /* PICKING STRATEGIES                                                   */
 /* ================================================================== */
 
+const SCAN_MODE_OPTIONS = [
+  { id: "loose", label: "Loose item / No LPN", help: "Scan Location + SYNNEX ID, then enter qty or scan SN/IMEI one by one." },
+  { id: "bulk", label: "Full box / Rapid SN-IMEI", help: "Scan SYNNEX ID once, then scan SN/IMEI continuously. System counts scanned units." },
+  { id: "oneToOne", label: "1:1 SYNNEX+SN+IMEI", help: "Each unit must be scanned as SYNNEX ID + SN + IMEI pair." },
+];
+const serialLinesFrom = (text = "") => String(text).split(/\n|,|;|\s+/).map((v) => v.trim()).filter(Boolean);
+const pairLinesFrom = (text = "") => String(text).split(/\n+/).map((line) => {
+  const [itemId = "", sn = "", imei = ""] = line.split(/[,|\t]/).map((v) => v.trim());
+  return { itemId, sn, imei };
+}).filter((r) => r.itemId || r.sn || r.imei);
+const serialBelongsToItem = (serialUnits = [], code = "", itemId = "") => {
+  const needle = String(code || "").trim().toLowerCase();
+  if (!needle) return true;
+  const found = serialUnits.find((u) => [u.sn, u.imei, u.unitId, u.boxBarcode].some((v) => String(v || "").trim().toLowerCase() === needle));
+  return !found || found.itemId === itemId;
+};
+const scannedQtyOf = (scan, fallbackQty = 0) => {
+  if (scan.mode === "oneToOne") return pairLinesFrom(scan.pairs).length || (scan.item && (scan.sn || scan.imei) ? 1 : 0);
+  const serialCount = serialLinesFrom(scan.serials).length + [scan.sn, scan.imei].filter(Boolean).length;
+  return serialCount || Number(scan.qty || fallbackQty || 0);
+};
+const resetScanState = (mode = "loose") => ({ mode, loc: "", item: "", lpn: "", qty: "", sn: "", imei: "", serials: "", pairs: "", video: false, label: false });
+
 function PickOps({ pickTasks = [], setPickTasks = () => {}, applyPick = () => {}, stock = [], serialUnits = [], addTx = () => {}, notify = () => {}, userSession }) {
-  const visibleTasks = pickTasks.filter((t) => t.released);
+  const visibleTasks = pickTasks.filter((t) => t.released && !["Completed", "Cancelled"].includes(t.status));
+  const completedToday = pickTasks.filter((t) => t.released && t.status === "Completed").length;
   const [activeId, setActiveId] = useState(visibleTasks[0]?.id || "");
   const active = visibleTasks.find((t) => t.id === activeId) || visibleTasks[0];
   const source = active ? stock.find((s) => s.itemId === active.itemId && s.loc === active.loc && ["ALLOC", "AVL"].includes(s.status)) : null;
   const unit = active ? serialUnits.find((u) => u.itemId === active.itemId && (!u.orderId || u.orderId === active.order)) : null;
-  const [scan, setScan] = useState({ loc: "", item: "", lpn: "", sn: "", imei: "" });
+  const [scan, setScan] = useState(resetScanState("loose"));
+  useEffect(() => {
+    if (!visibleTasks.length) setActiveId("");
+    else if (!visibleTasks.some((t) => t.id === activeId)) setActiveId(visibleTasks[0].id);
+  }, [visibleTasks.length, activeId]);
+  const setMode = (mode) => setScan(resetScanState(mode));
+  const fillDemo = () => setScan((x) => ({ ...x, loc: active?.loc || "", item: active?.itemId || "", lpn: source?.lpn || "", qty: active?.qty || "", sn: unit?.sn || "", imei: unit?.imei || "", serials: unit ? `${unit.sn || ""}\n${unit.imei || ""}` : "", pairs: unit ? `${active?.itemId || ""},${unit.sn || ""},${unit.imei || ""}` : "" }));
+  const validateSerialOwnership = () => {
+    const codes = [...serialLinesFrom(scan.serials), scan.sn, scan.imei].filter(Boolean);
+    const pairs = pairLinesFrom(scan.pairs);
+    if (pairs.some((r) => r.itemId && r.itemId !== active.itemId)) return "1:1 scan has wrong SYNNEX ID for this order.";
+    if ([...codes, ...pairs.flatMap((r) => [r.sn, r.imei]).filter(Boolean)].some((c) => !serialBelongsToItem(serialUnits, c, active.itemId))) return "Scanned SN/IMEI does not belong to this SYNNEX ID.";
+    return "";
+  };
   const validatePick = () => {
     if (!active) return;
-    if (active.status === "Completed") return notify("Pick Task นี้เสร็จแล้ว", "ไม่สามารถ Confirm Pick ซ้ำได้", "danger");
-    if ((scan.loc || "").trim().toUpperCase() !== active.loc.toUpperCase()) return notify("Scan Location ผิด", `ต้องสแกน Location ${active.loc}`, "danger");
-    if ((scan.item || "").trim() !== active.itemId) return notify("Scan Item ผิด", "รหัสที่สแกนต้องเป็น SYNNEX ID ของสินค้าที่ต้องหยิบ", "danger");
-    if (source?.lpn && scan.lpn && scan.lpn !== source.lpn) return notify("Scan LPN ผิด", `LPN ที่ถูกต้องคือ ${source.lpn}`, "danger");
-    if (unit?.sn && scan.sn && scan.sn !== unit.sn) return notify("Scan SN ผิด", "Serial Number ไม่ตรงกับสินค้าที่ถูกจอง", "danger");
-    if (unit?.imei && scan.imei && scan.imei !== unit.imei) return notify("Scan IMEI ผิด", "IMEI ไม่ตรงกับสินค้าที่ถูกจอง", "danger");
-    applyPick({ orderId: active.order, itemId: active.itemId, loc: active.loc, qty: active.qty });
-    setPickTasks((list) => list.map((t) => t.id === active.id ? { ...t, status: "Completed", pickedBy: userSession?.user || "system", pickedAt: new Date().toISOString() } : t));
-    addTx({ type: "Pick Scan", detail: `${active.id}: Location + Item + LPN/SN/IMEI validated`, itemId: active.itemId, lpn: source?.lpn, fromLoc: active.loc, toLoc: "PICK-PACK", user: userSession?.user || "system" });
-    notify("Pick สำเร็จ", `${active.id} หยิบถูกต้องและย้ายเข้า PICK-PACK`, "success");
-    setScan({ loc: "", item: "", lpn: "", sn: "", imei: "" });
+    if ((scan.loc || "").trim().toUpperCase() !== active.loc.toUpperCase()) return notify("Wrong Location", `Must scan location ${active.loc}`, "danger");
+    if ((scan.item || "").trim() !== active.itemId) return notify("Wrong Item", "Scanned code must be the order SYNNEX ID.", "danger");
+    if (scan.mode !== "loose" && source?.lpn && scan.lpn && scan.lpn !== source.lpn) return notify("Wrong LPN", `Correct LPN is ${source.lpn}`, "danger");
+    const serialError = validateSerialOwnership();
+    if (serialError) return notify("Wrong SN/IMEI", serialError, "danger");
+    const qty = scannedQtyOf(scan, scan.mode === "loose" ? scan.qty : 0);
+    if (!qty || qty <= 0) return notify("Qty required", "Enter qty or scan at least one SN/IMEI.", "danger");
+    if (qty < Number(active.qty || 0)) return notify("Qty incomplete", `Required ${active.qty}, scanned ${qty}.`, "danger");
+    if (qty > Number(active.qty || 0)) return notify("Qty over order", `Required ${active.qty}, scanned ${qty}.`, "danger");
+    applyPick({ orderId: active.order, itemId: active.itemId, loc: active.loc, qty });
+    setPickTasks((list) => list.map((t) => t.id === active.id ? { ...t, status: "Completed", pickedQty: qty, pickedBy: userSession?.user || "system", pickedAt: new Date().toISOString(), scanMode: scan.mode } : t));
+    addTx({ type: "Pick Scan", detail: `${active.id}: ${SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.label} - Location + SYNNEX ID + ${qty} pcs validated`, itemId: active.itemId, lpn: scan.mode === "loose" ? "-" : source?.lpn, fromLoc: active.loc, toLoc: "PICK-PACK", qty, user: userSession?.user || "system" });
+    notify("Pick completed", `${active.id} picked ${qty} pcs. Task is hidden from Handheld to prevent duplicate pick.`, "success");
+    setScan(resetScanState(scan.mode));
   };
+  const modeHelp = SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.help || "";
   return (
     <>
       <div className="grid g4" style={{ marginBottom: 14 }}>
-        <LpCard icon={Smartphone} label="Pick Tasks" value={visibleTasks.length} sub="เฉพาะงานที่ Release แล้ว" variant="plan" />
-        <LpCard icon={CheckCircle2} label="Completed" value={visibleTasks.filter((t) => t.status === "Completed").length} sub="สแกนครบ" variant="good" />
-        <LpCard icon={AlertTriangle} label="Pending" value={visibleTasks.filter((t) => t.status !== "Completed").length} sub="รอหยิบ" variant="plan" />
-        <LpCard icon={MapPinned} label="Pick-Pack Zone" value="PICK-PACK" sub="ปลายทางหลังหยิบ" variant="info" />
+        <LpCard icon={Smartphone} label="Pick Tasks" value={visibleTasks.length} sub="Released and not completed" variant="plan" />
+        <LpCard icon={CheckCircle2} label="Completed" value={completedToday} sub="Hidden from Handheld" variant="good" />
+        <LpCard icon={AlertTriangle} label="Pending" value={visibleTasks.length} sub="Waiting pick" variant="plan" />
+        <LpCard icon={MapPinned} label="Pick-Pack Zone" value="PICK-PACK" sub="Destination after pick" variant="info" />
       </div>
-      {visibleTasks.length === 0 && <div className="card" style={{ marginBottom: 14 }}><div className="kpi-sub" style={{ textAlign: "center", padding: "18px" }}>ยังไม่มีงาน Picking เพราะยังไม่มี Order ที่กด Release Order จากหน้า Allocate</div></div>}
+      {visibleTasks.length === 0 && <div className="card" style={{ marginBottom: 14 }}><div className="kpi-sub" style={{ textAlign: "center", padding: "18px" }}>No active Picking task. Completed tasks are hidden to prevent duplicate pick.</div></div>}
       <div className="handheld-shell">
         <div className="handheld-phone">
           <div className="handheld-top"><Smartphone size={16} /> Picking Handheld</div>
-          <div className="field"><label>เลือก Pick Task</label><select value={active?.id || ""} onChange={(e) => setActiveId(e.target.value)}>{visibleTasks.map((t) => <option key={t.id} value={t.id}>{t.id} · {t.order} · {t.itemId}</option>)}</select></div>
-          {active && <div className="handheld-job-card"><b>{active.order}</b><span>{itemOf(active.itemId)?.name}</span><em>{active.loc} · {active.itemId} · Qty {active.qty}</em></div>}
-          {active && <div className="scan-steps-row"><span className="scan-step active">1 Scan Location</span><span className="scan-step active">2 Scan SYNNEX ID</span><span className="scan-step active">3 Scan LPN/SN/IMEI</span></div>}
+          <div className="field"><label>Pick Task</label><select value={active?.id || ""} onChange={(e) => setActiveId(e.target.value)}>{visibleTasks.map((t) => <option key={t.id} value={t.id}>{t.id} ? {t.order} ? {t.itemId}</option>)}</select></div>
+          {active && <div className="handheld-job-card"><b>{active.order}</b><span>{itemOf(active.itemId)?.name}</span><em>{active.loc} ? {active.itemId} ? Qty {active.qty}</em></div>}
+          <div className="field"><label>Scan Mode</label><select value={scan.mode} onChange={(e) => setMode(e.target.value)}>{SCAN_MODE_OPTIONS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select><div className="kpi-sub">{modeHelp}</div></div>
+          {active && <div className="scan-steps-row"><span className="scan-step active">1 Scan Location</span><span className="scan-step active">2 Scan SYNNEX ID</span><span className="scan-step active">3 {scan.mode === "loose" ? "Qty / SN-IMEI" : scan.mode === "bulk" ? "Rapid SN/IMEI" : "SYNNEX+SN+IMEI"}</span></div>}
           <div className="field"><label>Scan Location</label><input className="text-input" value={scan.loc} onChange={(e) => setScan({ ...scan, loc: e.target.value })} /></div>
           <div className="field"><label>Scan SYNNEX ID</label><input className="text-input" value={scan.item} onChange={(e) => setScan({ ...scan, item: e.target.value })} /></div>
-          <div className="field"><label>Scan LPN</label><input className="text-input" value={scan.lpn} onChange={(e) => setScan({ ...scan, lpn: e.target.value })} /></div>
-          <div className="field"><label>Scan SN</label><input className="text-input" value={scan.sn} onChange={(e) => setScan({ ...scan, sn: e.target.value })} /></div>
-          <div className="field"><label>Scan IMEI</label><input className="text-input" value={scan.imei} onChange={(e) => setScan({ ...scan, imei: e.target.value })} /></div>
-          <button className="btn secondary" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }} onClick={() => setScan({ loc: active?.loc || "", item: active?.itemId || "", lpn: source?.lpn || "", sn: unit?.sn || "", imei: unit?.imei || "" })}><ScanLine size={13} /> เติมค่าทดสอบตาม Task</button>
+          {scan.mode !== "loose" && <div className="field"><label>Scan LPN / Box (optional)</label><input className="text-input" value={scan.lpn} onChange={(e) => setScan({ ...scan, lpn: e.target.value })} /></div>}
+          {scan.mode === "loose" && <div className="field"><label>Loose Qty / No LPN</label><input type="number" min="1" className="text-input" value={scan.qty} onChange={(e) => setScan({ ...scan, qty: e.target.value })} /></div>}
+          {scan.mode !== "oneToOne" && <div className="field"><label>Rapid SN / IMEI scan</label><textarea rows={4} value={scan.serials} onChange={(e) => setScan({ ...scan, serials: e.target.value })} placeholder="Scan SN/IMEI continuously, separated by line or space" /></div>}
+          {scan.mode === "oneToOne" && <div className="field"><label>1:1 scan: SYNNEX ID,SN,IMEI</label><textarea rows={5} value={scan.pairs} onChange={(e) => setScan({ ...scan, pairs: e.target.value })} placeholder="6425011001,SN-NB-ASUS-0001,IMEI-356789100000001" /></div>}
+          <div className="grid g2"><div className="field"><label>Single SN</label><input className="text-input" value={scan.sn} onChange={(e) => setScan({ ...scan, sn: e.target.value })} /></div><div className="field"><label>Single IMEI</label><input className="text-input" value={scan.imei} onChange={(e) => setScan({ ...scan, imei: e.target.value })} /></div></div>
+          <div className="allocation-progress-strip" style={{ margin: "8px 0" }}><div><span>Required</span><b>{active?.qty || 0}</b></div><div><span>Scanned</span><b>{scannedQtyOf(scan)}</b></div></div>
+          <button className="btn secondary" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }} onClick={fillDemo}><ScanLine size={13} /> Fill demo scan</button>
           <button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={validatePick}><ScanLine size={13} /> Confirm Pick Scan</button>
         </div>
         <div className="table-wrap" style={{ flex: 1 }}>
           <table><thead><tr><th>Task</th><th>Order</th><th>SYNNEX ID</th><th>Item Name</th><th>Location</th><th>LPN</th><th>Qty</th><th>Status</th></tr></thead><tbody>
-            {visibleTasks.length === 0 && <tr><td colSpan={8} className="kpi-sub">ยังไม่มี Pick Task จาก Release Order</td></tr>}
+            {visibleTasks.length === 0 && <tr><td colSpan={8} className="kpi-sub">No active Pick Task.</td></tr>}
             {visibleTasks.map((t) => { const s = stock.find((r) => r.itemId === t.itemId && r.loc === t.loc); return <tr key={t.id}><td className="mono">{t.id}</td><td>{t.order}</td><td className="mono">{t.itemId}</td><td>{itemOf(t.itemId)?.name || "-"}</td><td className="mono">{t.loc}</td><td className="mono">{t.lpn || s?.lpn || "-"}</td><td>{t.qty}</td><td><OrderStatusPill status={t.status} /></td></tr>; })}
           </tbody></table>
         </div>
@@ -4142,46 +4187,78 @@ function ConsoleOrder({ allocOrders = [], stock = [] }) {
   );
 }
 
-function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pickTasks = [], setPickTasks = () => {}, addTx = () => {}, notify = () => {}, confirmAction = ({ onConfirm }) => onConfirm?.(), userSession }) {
-  const rows = allocOrders.filter((o) => ["Picked", "Packed", "Packing"].includes(o.status)).slice(0, 16);
+function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pickTasks = [], setPickTasks = () => {}, serialUnits = [], addTx = () => {}, notify = () => {}, confirmAction = ({ onConfirm }) => onConfirm?.(), userSession }) {
+  const rows = allocOrders.filter((o) => ["Picked", "Packing"].includes(o.status)).slice(0, 16);
+  const packedCount = allocOrders.filter((o) => o.status === "Packed").length;
   const [activeId, setActiveId] = useState(rows[0]?.id || "");
   const active = rows.find((o) => o.id === activeId) || rows[0];
+  useEffect(() => {
+    if (!rows.length) setActiveId("");
+    else if (!rows.some((o) => o.id === activeId)) setActiveId(rows[0].id);
+  }, [rows.length, activeId]);
+  const activeItems = active ? orderLinesOf(active) : [];
+  const activeItemId = activeItems[0]?.itemId || stock.find((s) => s.allocatedFor === active?.id)?.itemId || "";
+  const activeQty = activeItems.reduce((a, l) => a + Number(l.qty || 0), 0) || stock.filter((s) => s.allocatedFor === active?.id && s.status === "PICKED").reduce((a, s) => a + Number(s.qty || 0), 0) || 1;
   const boxLpn = active ? stock.find((s) => s.allocatedFor === active.id || s.status === "PICKED")?.lpn || `BOX-${active.id}` : "";
-  const [scan, setScan] = useState({ lpn: "", sn: "", imei: "", video: false, label: false });
+  const [scan, setScan] = useState(resetScanState("bulk"));
   const [invoiceQ, setInvoiceQ] = useState("");
   const invoiceRows = allocOrders.map((o) => ({
     invoice: `INV-${o.id.replace(/\D/g, "").slice(-5)}`,
     order: o,
     stockRows: stock.filter((s) => s.allocatedFor === o.id || (o.lines || o.items || []).some?.((l) => l.itemId === s.itemId)),
   })).filter((r) => !invoiceQ || `${r.invoice} ${r.order.id} ${r.order.customer}`.toLowerCase().includes(invoiceQ.toLowerCase()));
+  const setMode = (mode) => setScan(resetScanState(mode));
+  const fillPackDemo = () => {
+    const unit = serialUnits.find((u) => u.itemId === activeItemId && (!u.orderId || u.orderId === active?.id || u.sampleOrder === active?.id));
+    setScan((x) => ({ ...x, item: activeItemId, lpn: boxLpn, qty: activeQty, sn: unit?.sn || "", imei: unit?.imei || "", serials: unit ? `${unit.sn || ""}\n${unit.imei || ""}` : "", pairs: unit ? `${activeItemId},${unit.sn || ""},${unit.imei || ""}` : "" }));
+  };
+  const validatePackScan = () => {
+    if (!active) return "";
+    if (!scan.item) return "Scan SYNNEX ID before packing.";
+    const validItem = activeItems.length ? activeItems.some((l) => l.itemId === scan.item) : scan.item === activeItemId;
+    if (!validItem) return "Scanned SYNNEX ID is not in this order.";
+    if (scan.mode !== "loose" && !scan.lpn) return "Scan box barcode or LPN before closing carton.";
+    const pairs = pairLinesFrom(scan.pairs);
+    if (pairs.some((r) => r.itemId && !activeItems.some((l) => l.itemId === r.itemId) && r.itemId !== activeItemId)) return "1:1 scan contains SYNNEX ID outside this order.";
+    const codes = [...serialLinesFrom(scan.serials), scan.sn, scan.imei, ...pairs.flatMap((r) => [r.sn, r.imei])].filter(Boolean);
+    if (codes.some((c) => !serialBelongsToItem(serialUnits, c, scan.item))) return "Scanned SN/IMEI does not belong to this SYNNEX ID.";
+    const qty = scannedQtyOf(scan, scan.mode === "loose" ? scan.qty : 0);
+    if (!qty || qty <= 0) return "Enter qty or scan at least one SN/IMEI.";
+    if (qty < activeQty) return `Qty incomplete. Required ${activeQty}, scanned ${qty}.`;
+    if (qty > activeQty) return `Qty over order. Required ${activeQty}, scanned ${qty}.`;
+    return "";
+  };
   const confirmPack = () => {
     if (!active) return;
-    if (!scan.lpn) return notify("ยังไม่ได้ Scan LPN/Box", "ต้องสแกน Barcode ข้างกล่องหรือ LPN ก่อนปิดกล่อง", "danger");
-    if (!scan.video) return notify("ยังไม่ได้อัด VDO", "ต้องยืนยันว่าอัด VDO ครบก่อน Packed", "danger");
-    if (!scan.label) return notify("ยังไม่ได้ Print เอกสาร", "ต้อง Print เอกสารปะหน้าก่อนปิด Order", "danger");
-    setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Packed", packedAt: new Date().toISOString(), packedBy: userSession?.user || "system" } : o));
-    addTx({ type: "Pack", detail: `${active.id}: Packed · LPN ${scan.lpn} · SN ${scan.sn || "-"} · IMEI ${scan.imei || "-"} · VDO completed`, orderId: active.id, lpn: scan.lpn, loc: "PACK", user: userSession?.user || "system" });
-    notify("Pack สำเร็จ", `${active.id} เปลี่ยนสถานะเป็น Packed แล้ว`, "success");
+    const err = validatePackScan();
+    if (err) return notify("Pack scan failed", err, "danger");
+    if (!scan.video) return notify("VDO required", "Confirm VDO recording before Packed.", "danger");
+    if (!scan.label) return notify("Label required", "Print shipping label before closing order.", "danger");
+    const qty = scannedQtyOf(scan, scan.qty);
+    setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Packed", packedAt: new Date().toISOString(), packedBy: userSession?.user || "system", packScanMode: scan.mode, packScanQty: qty } : o));
+    addTx({ type: "Pack", detail: `${active.id}: ${SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.label} - Packed ${qty} pcs - LPN/Box ${scan.lpn || "-"} - VDO completed`, orderId: active.id, itemId: scan.item, lpn: scan.lpn || "-", loc: "PACK", qty, user: userSession?.user || "system" });
+    notify("Pack completed", `${active.id} is Packed and hidden from Pack queue.`, "success");
+    setScan(resetScanState(scan.mode));
   };
   const cancelPack = () => {
     if (!active) return;
     const assignees = pickTasks.filter((t) => t.order === active.id).map((t) => t.assignee).filter(Boolean);
-    setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Cancelled by Sales API", cancelledAt: new Date().toISOString(), cancelSource: "Sales API", cancelReason: "ลูกค้า/ฝ่ายขายยกเลิก Order ก่อน Ship" } : o));
-    setPickTasks((list) => list.map((t) => t.order === active.id ? { ...t, status: "Cancelled", alert: "Sales API ยกเลิก Order หยุด Pick/Pack ทันที" } : t));
-    addTx({ type: "Cancel Pack", detail: `${active.id}: Sales API ส่งคำสั่ง Cancel ระหว่าง Pick/Pack แจ้งเตือน ${assignees.join(", ") || "Packer"} แล้ว`, orderId: active.id, loc: "PACK", user: userSession?.user || "sales-api" });
-    notify("แจ้งเตือน Cancel Order แล้ว", `${active.id} ถูกยกเลิก และแจ้งไปยัง ${assignees.join(", ") || "ทีม Pick/Pack"}`, "danger");
+    setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Cancelled by Sales API", cancelledAt: new Date().toISOString(), cancelSource: "Sales API", cancelReason: "Sales cancelled before Ship" } : o));
+    setPickTasks((list) => list.map((t) => t.order === active.id ? { ...t, status: "Cancelled", alert: "Sales API cancelled order. Stop Pick/Pack immediately." } : t));
+    addTx({ type: "Cancel Pack", detail: `${active.id}: Sales API cancelled during Pick/Pack. Alerted ${assignees.join(", ") || "Packer"}.`, orderId: active.id, loc: "PACK", user: userSession?.user || "sales-api" });
+    notify("Cancel Order alerted", `${active.id} cancelled and Pick/Pack team alerted.`, "danger");
   };
   return (
     <>
       <div className="grid g4" style={{ marginBottom: 14 }}>
-        <LpCard icon={Package} label="รอ Pack" value={rows.filter((o) => o.status !== "Packed").length} sub="Order" variant="plan" />
-        <LpCard icon={PackageCheck} label="Packed" value={rows.filter((o) => o.status === "Packed").length} sub="ปิดกล่องแล้ว" variant="good" />
-        <LpCard icon={Video} label="VDO Proof" value="Required" sub="ต้องอัดวิดีโอ" variant="info" />
-        <LpCard icon={Printer} label="Label" value="Print" sub="เอกสารปะหน้า" variant="plan" />
+        <LpCard icon={Package} label="Waiting Pack" value={rows.length} sub="Not Packed" variant="plan" />
+        <LpCard icon={PackageCheck} label="Packed" value={packedCount} sub="Hidden from Pack queue" variant="good" />
+        <LpCard icon={Video} label="VDO Proof" value="Required" sub="Camera recording" variant="info" />
+        <LpCard icon={Printer} label="Label" value="Print" sub="Shipping document" variant="plan" />
       </div>
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3>ค้นหา Invoice / Order Location</h3>
-        <div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={invoiceQ} onChange={(e) => setInvoiceQ(e.target.value)} placeholder="ค้นหา Invoice เช่น INV-88213 หรือ SO / Customer" /></div>
+        <h3>Invoice / Order Location Search</h3>
+        <div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={invoiceQ} onChange={(e) => setInvoiceQ(e.target.value)} placeholder="Search invoice, SO, customer" /></div>
         <div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Order</th><th>Customer</th><th>Current Status</th><th>Location / Zone</th><th>LPN</th><th>Item</th></tr></thead><tbody>{invoiceRows.slice(0, 6).map((r) => {
           const first = r.stockRows[0];
           const loc = first?.loc || (r.order.status === "Packed" ? "PACKED / LOAD-STAGING" : r.order.status === "Picked" ? "PICK-PACK" : "-");
@@ -4191,18 +4268,26 @@ function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pick
       <div className="grid g2">
         <div className="card">
           <h3>Pack Station Scan</h3>
-          <div className="field"><label>เลือก Order</label><select value={active?.id || ""} onChange={(e) => setActiveId(e.target.value)}>{rows.map((o) => <option key={o.id} value={o.id}>{o.id} · {o.customer || "-"}</option>)}</select></div>
-          <div className="field"><label>Scan Barcode ข้างกล่อง / LPN</label><input value={scan.lpn} onChange={(e) => setScan({ ...scan, lpn: e.target.value })} placeholder={boxLpn} /></div>
+          <div className="field"><label>Order</label><select value={active?.id || ""} onChange={(e) => setActiveId(e.target.value)}>{rows.map((o) => <option key={o.id} value={o.id}>{o.id} ? {o.customer || "-"}</option>)}</select></div>
+          {!active && <div className="kpi-sub" style={{ marginBottom: 12 }}>No active Pack task. Packed orders are hidden to prevent duplicate pack.</div>}
+          <div className="field"><label>Scan Mode</label><select value={scan.mode} onChange={(e) => setMode(e.target.value)}>{SCAN_MODE_OPTIONS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select><div className="kpi-sub">{SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.help}</div></div>
+          <div className="field"><label>Scan SYNNEX ID</label><input value={scan.item} onChange={(e) => setScan({ ...scan, item: e.target.value })} placeholder={activeItemId} /></div>
+          {scan.mode !== "loose" && <div className="field"><label>Scan Box Barcode / LPN</label><input value={scan.lpn} onChange={(e) => setScan({ ...scan, lpn: e.target.value })} placeholder={boxLpn} /></div>}
+          {scan.mode === "loose" && <div className="field"><label>Loose Qty / No LPN</label><input type="number" min="1" value={scan.qty} onChange={(e) => setScan({ ...scan, qty: e.target.value })} /></div>}
+          {scan.mode !== "oneToOne" && <div className="field"><label>Rapid SN / IMEI scan</label><textarea rows={4} value={scan.serials} onChange={(e) => setScan({ ...scan, serials: e.target.value })} placeholder="Scan SN/IMEI continuously. System counts qty." /></div>}
+          {scan.mode === "oneToOne" && <div className="field"><label>1:1 scan: SYNNEX ID,SN,IMEI</label><textarea rows={5} value={scan.pairs} onChange={(e) => setScan({ ...scan, pairs: e.target.value })} placeholder="6425011001,SN-NB-ASUS-0001,IMEI-356789100000001" /></div>}
           <div className="grid g2">
-            <div className="field"><label>Scan SN (ถ้ามี)</label><input value={scan.sn} onChange={(e) => setScan({ ...scan, sn: e.target.value })} /></div>
-            <div className="field"><label>Scan IMEI (ถ้ามี)</label><input value={scan.imei} onChange={(e) => setScan({ ...scan, imei: e.target.value })} /></div>
+            <div className="field"><label>Single SN</label><input value={scan.sn} onChange={(e) => setScan({ ...scan, sn: e.target.value })} /></div>
+            <div className="field"><label>Single IMEI</label><input value={scan.imei} onChange={(e) => setScan({ ...scan, imei: e.target.value })} /></div>
           </div>
-          <label className="checkline"><input type="checkbox" checked={scan.video} onChange={(e) => setScan({ ...scan, video: e.target.checked })} /> อัด VDO จากกล้องครบแล้ว</label>
-          <label className="checkline"><input type="checkbox" checked={scan.label} onChange={(e) => setScan({ ...scan, label: e.target.checked })} /> Print เอกสารปะหน้าแล้ว</label>
-          <button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => confirmAction({ title: "Confirm Pack", message: `ยืนยัน Pack ${active?.id || ""}?`, onConfirm: confirmPack })}><PackageCheck size={13} /> Confirm Packed</button>
-          <button className="btn secondary" style={{ width: "100%", justifyContent: "center", marginTop: 8, color: "var(--danger)" }} onClick={() => confirmAction({ title: "Sales API Cancel Order", message: `จำลอง API จาก Sales เพื่อยกเลิก ${active?.id || ""} และแจ้งเตือนทีม Pick/Pack ทันที?`, kind: "danger", onConfirm: cancelPack })}><ShieldAlert size={13} /> Cancel Pack / Order</button>
+          <div className="allocation-progress-strip" style={{ margin: "8px 0" }}><div><span>Required</span><b>{activeQty}</b></div><div><span>Scanned</span><b>{scannedQtyOf(scan)}</b></div></div>
+          <label className="checkline"><input type="checkbox" checked={scan.video} onChange={(e) => setScan({ ...scan, video: e.target.checked })} /> VDO recording completed</label>
+          <label className="checkline"><input type="checkbox" checked={scan.label} onChange={(e) => setScan({ ...scan, label: e.target.checked })} /> Shipping label printed</label>
+          <button className="btn secondary" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }} onClick={fillPackDemo}><ScanLine size={13} /> Fill demo scan</button>
+          <button className="btn" style={{ width: "100%", justifyContent: "center" }} disabled={!active} onClick={() => confirmAction({ title: "Confirm Pack", message: `Confirm Pack ${active?.id || ""}?`, onConfirm: confirmPack })}><PackageCheck size={13} /> Confirm Packed</button>
+          <button className="btn secondary" style={{ width: "100%", justifyContent: "center", marginTop: 8, color: "var(--danger)" }} disabled={!active} onClick={() => confirmAction({ title: "Sales API Cancel Order", message: `Simulate Sales API cancellation for ${active?.id || ""}?`, kind: "danger", onConfirm: cancelPack })}><ShieldAlert size={13} /> Cancel Pack / Order</button>
         </div>
-        <div className="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>LPN / Box</th><th>Scan Required</th><th>Status</th><th>Packed By</th></tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={6} className="kpi-sub">ยังไม่มีงานรอ Pack</td></tr>}{rows.map((o) => <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td className="mono">{stock.find((s) => s.allocatedFor === o.id)?.lpn || `BOX-${o.id}`}</td><td>LPN / SN / IMEI / VDO</td><td><OrderStatusPill status={o.status} /></td><td>{o.packedBy || "-"}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>LPN / Box</th><th>Scan Required</th><th>Status</th><th>Packed By</th></tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={6} className="kpi-sub">No active Pack task.</td></tr>}{rows.map((o) => <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td className="mono">{stock.find((s) => s.allocatedFor === o.id)?.lpn || `BOX-${o.id}`}</td><td>SYNNEX / Qty / SN / IMEI / VDO</td><td><OrderStatusPill status={o.status} /></td><td>{o.packedBy || "-"}</td></tr>)}</tbody></table></div>
       </div>
     </>
   );
