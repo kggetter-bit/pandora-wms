@@ -3574,7 +3574,8 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
       const util = locUtil(r.loc);
       return {
         ...r,
-        remainingQty: Math.max(0, Number(r.onhandQty || 0) - Number(r.allocatedQty || 0)),
+        originalOnhandQty: Number(r.onhandQty || 0) + Number(r.allocatedQty || 0),
+        remainingQty: Number(r.onhandQty || 0),
         canAllocate: Boolean(r.canAllocate),
         blockReason: r.blockReason || "",
         system: locOf(r.loc)?.system || "Manual",
@@ -4114,6 +4115,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
             const selectableOnhand = onhandRows.filter((r) => r.status === "AVL" && r.canAllocate).reduce((a, r) => a + Number(r.onhandQty || 0), 0);
             const blockedOnhand = onhandRows.filter((r) => r.status === "AVL" && !r.canAllocate).reduce((a, r) => a + Number(r.onhandQty || 0), 0);
             const orderNeedQty = Math.max(0, Number(p.originalQty || 0) - Number(p.allocatedQty || 0));
+            const orderQtyByItem = Object.fromEntries(orderLinesOf(detailOrder).map((l) => [l.itemId, Number(l.qty || 0)]));
             const stockCheckText = p.allocatedQty > 0
               ? (hasShortage ? partialReadyText : `สินค้าเพียงพอสำหรับ Order นี้ · Allocate ได้ ${p.allocatedQty} / ${p.originalQty} หน่วย`)
               : selectedQty > 0
@@ -4157,10 +4159,10 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                   {["Partial Released", "Backorder"].includes(detailOrder.status) && <><button className="btn" onClick={() => confirmAction({ title: "Re-Allocate Shortage", message: `ลอง Allocate ส่วนที่ค้างของ ${detailOrder.id} อีกครั้งหรือไม่`, onConfirm: () => reallocateShortage(detailOrder) })}><RefreshCw size={12} /> Re-Allocate Shortage</button><button className="btn secondary" onClick={() => confirmAction({ title: "Cancel Shortage", message: `ตัดรายการที่ยังขาดของ ${detailOrder.id} ออกจาก Order หรือไม่`, onConfirm: () => cancelShortage(detailOrder) })}><Trash2 size={12} /> Cancel Shortage</button></>}
                 </div>
                 <div className="section-title" style={{ marginTop: 0 }}>Onhand by Location / เลือกแหล่งจ่าย</div>
-                <div className="kpi-sub" style={{ marginBottom: 10 }}>แสดง Stock ทุก Location ของสินค้าใน Order นี้ ทั้ง Onhand ที่ยังจ่ายได้ และ Qty ที่ถูก Allocate ให้ Order นี้แล้ว จึงไม่หายหลังจากกด Allocate</div>
+                <div className="kpi-sub" style={{ marginBottom: 10 }}>แสดง Stock ทุก Location ของสินค้าใน Order นี้ โดย Onhand Qty คือจำนวนที่เหลือให้จ่ายได้หลังหักยอดที่ Allocate ให้ Order นี้แล้ว</div>
                 <div className="table-wrap" style={{ marginBottom: 14 }}>
                   <table>
-                    <thead><tr><th>เลือก</th><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Allocated This Order</th><th>Remaining</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
+                    <thead><tr><th>เลือก</th><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Order Qty</th><th>Allocated This Order</th><th>Remaining</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
                     <tbody>
                       {onhandRows.map((r) => {
                         const canPick = r.status === "AVL" && r.canAllocate;
@@ -4171,7 +4173,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                               {canPick ? <input type="checkbox" checked={!!sourceChecked[pickKey]} onChange={(e) => toggleSource(detailOrder, r, e.target.checked)} /> : r.status === "ALLOC" ? <span className="scan-step done">จองแล้ว</span> : <span className="scan-step" style={{ color: "var(--danger)", background: "rgba(241,91,113,.10)" }}>{r.blockReason || "Block"}</span>}
                             </td>
                             <td style={{ minWidth: 92 }}>{canPick ? <input type="number" min="0" max={r.qty} value={sourcePick[pickKey] || ""} placeholder="0" disabled={!sourceChecked[pickKey]} onChange={(e) => setSourceQty(detailOrder.id, r.itemId, r, e.target.value)} style={{ width: 72 }} /> : "-"}</td>
-                            <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{r.allocatedQty}</td><td>{r.remainingQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
+                            <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{orderQtyByItem[r.itemId] || 0}</td><td>{r.allocatedQty}</td><td>{r.remainingQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
                           </tr>
                         );
                       })}
