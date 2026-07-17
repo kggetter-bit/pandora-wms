@@ -3524,11 +3524,63 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   const [manualForm, setManualForm] = useState({ customer: "", priority: "Normal", channel: "B2B", route: "BKK-01", region: "Bangkok", salesSentAt: "2569-07-10 11:00", shipSeq: 9, lines: [{ itemId: ITEMS[0].id, qty: 1 }] });
   const [filters, setFilters] = useState({ q: "", priority: "ALL", channel: "ALL", route: "ALL", region: "ALL", customer: "ALL", sortBy: "salesSentAt", sortDir: "asc" });
   const [detailOrderId, setDetailOrderId] = useState("");
+  const [sourcePick, setSourcePick] = useState({});
 
   const readyForSale = (row) => row.status === "AVL" && stickerStateOfStock(row).ok;
   const availRows = (itemId) => stock.filter((s) => s.itemId === itemId && readyForSale(s));
   const stickerBlockedRows = (itemId) => stock.filter((s) => s.itemId === itemId && s.status === "AVL" && !stickerStateOfStock(s).ok);
   const availableQty = (itemId) => availRows(itemId).reduce((a, r) => a + r.qty, 0);
+  const stockKeyOf = (row) => String(row?.key || `${row?.itemId || ""}|${row?.loc || ""}|${row?.lpn || ""}|${row?.batch || ""}|${row?.status || ""}|${row?.allocatedFor || ""}`);
+  const sourcePickKey = (orderId, itemId, row) => `${orderId}|${itemId}|${stockKeyOf(row)}`;
+  const locUtil = (loc) => {
+    const l = locOf(loc);
+    const cap = Number(l?.capacity || 0);
+    const used = stock.filter((s) => s.loc === loc).reduce((a, r) => a + Number(r.qty || 0), 0);
+    return { used, cap, pct: cap ? Math.min(100, Math.round((used / cap) * 100)) : 0 };
+  };
+  const palletOrBasketState = (row) => {
+    const l = locOf(row?.loc);
+    const cap = Number(l?.capacity || 0);
+    const pct = cap ? (Number(row?.qty || 0) / cap) * 100 : 0;
+    const unit = ["ASRS", "Miniload", "Bin"].includes(l?.system) || l?.type === "Bin" ? "ตะกร้า" : "พาเลท";
+    return `${pct >= 90 ? "เต็ม" : "ไม่เต็ม"}${unit}`;
+  };
+  const onhandRowsForOrder = (order) => {
+    const wanted = new Set(orderLinesOf(order || {}).map((l) => l.itemId));
+    return stock
+      .filter((r) => wanted.has(r.itemId) && (readyForSale(r) || (r.status === "ALLOC" && r.allocatedFor === order?.id)))
+      .map((r) => {
+        const util = locUtil(r.loc);
+        return {
+          ...r,
+          onhandQty: r.status === "AVL" ? Number(r.qty || 0) : 0,
+          allocatedQty: r.status === "ALLOC" && r.allocatedFor === order?.id ? Number(r.qty || 0) : 0,
+          system: locOf(r.loc)?.system || "Manual",
+          type: locOf(r.loc)?.type || "-",
+          plant: locOf(r.loc)?.plant || "-",
+          floor: locOf(r.loc)?.floor || "-",
+          utilPct: util.pct,
+          utilUsed: util.used,
+          utilCap: util.cap,
+          palletState: palletOrBasketState(r),
+        };
+      });
+  };
+  const selectedSourcePlan = (order) => {
+    const rows = onhandRowsForOrder(order).filter((r) => r.status === "AVL");
+    return rows.reduce((acc, r) => {
+      const key = sourcePickKey(order.id, r.itemId, r);
+      const qty = Math.min(Number(sourcePick[key] || 0), Number(r.qty || 0));
+      if (qty > 0) acc[r.itemId] = [...(acc[r.itemId] || []), { rowKey: stockKeyOf(r), qty }];
+      return acc;
+    }, {});
+  };
+  const selectedSourceQty = (order) => Object.values(selectedSourcePlan(order)).flat().reduce((a, r) => a + Number(r.qty || 0), 0);
+  const setSourceQty = (orderId, itemId, row, qty) => {
+    const max = Number(row.qty || 0);
+    const clean = Math.max(0, Math.min(Number(qty || 0), max));
+    setSourcePick((prev) => ({ ...prev, [sourcePickKey(orderId, itemId, row)]: clean }));
+  };
 
   const advanceJob = (jobId, steps, onDone) => {
     let i = 0;
@@ -3542,7 +3594,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   };
 
   // ALLOCATE — reserve stock from AVL → ALLOC (tagged to this order). No robot/pick dispatch yet.
-  const allocate = (order) => {
+  const allocate = (order, sourcePlan = {}) => {
     const lines = [];
     const blockedWarnings = [];
     setStock((stockList) => {
@@ -3552,16 +3604,24 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
         const blockedQty = next.filter((r) => r.itemId === it.itemId && r.status === "AVL" && !stickerStateOfStock(r).ok).reduce((a, r) => a + r.qty, 0);
         if (blockedQty > 0) blockedWarnings.push({ itemId: it.itemId, qty: blockedQty });
         const availableNow = next.filter((r) => r.itemId === it.itemId && readyForSale(r));
+        const selectedRows = sourcePlan[it.itemId] || [];
+        const selectedMode = selectedRows.length > 0;
+        const candidates = selectedMode
+          ? selectedRows.map((sel) => ({ rowKey: sel.rowKey, limit: Number(sel.qty || 0) })).filter((sel) => sel.limit > 0)
+          : availableNow.map((r) => ({ rowKey: stockKeyOf(r), limit: Number(r.qty || 0) }));
         const sources = [];
-        for (const r of availableNow) {
+        for (const candidate of candidates) {
           if (need <= 0) break;
-          const take = Math.min(need, r.qty);
-          sources.push({ loc: r.loc || "PICK-PACK", system: locOf(r.loc)?.system || "Manual", qty: take, pickedQty: 0, lpn: r.lpn || "-", warehouse: locOf(r.loc)?.plant || "BKK1" });
+          const r = next.find((row) => stockKeyOf(row) === candidate.rowKey && row.itemId === it.itemId && readyForSale(row));
+          if (!r) continue;
+          const take = Math.min(need, Number(r.qty || 0), Number(candidate.limit || 0));
+          if (take <= 0) continue;
+          sources.push({ loc: r.loc || "PICK-PACK", system: locOf(r.loc)?.system || "Manual", qty: take, pickedQty: 0, lpn: r.lpn || "-", warehouse: locOf(r.loc)?.plant || "BKK1", onhandBefore: r.qty, utilPct: locUtil(r.loc).pct });
           need -= take;
           next = next.map((row) => (row === r ? { ...row, qty: row.qty - take } : row));
           next = [...next, { key: Date.now() + Math.random(), itemId: it.itemId, batch: r.batch, lpn: r.lpn, loc: r.loc, qty: take, status: "ALLOC", age: r.age, allocatedFor: order.id }];
         }
-        lines.push({ itemId: it.itemId, qty: it.qty, available: availableQty(it.itemId), sources, shortfall: need, stickerBlockedQty: blockedQty });
+        lines.push({ itemId: it.itemId, qty: it.qty, available: availableNow.reduce((a, r) => a + Number(r.qty || 0), 0), sources, shortfall: need, stickerBlockedQty: blockedQty, allocationMode: selectedMode ? "Manual Location" : "Auto" });
       });
       return next.filter((r) => r.qty > 0);
     });
@@ -3572,7 +3632,8 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     const shortQty = lines.reduce((a, l) => a + l.shortfall, 0);
     const event = { t: new Date().toISOString(), type: status === "Partial" ? "Partial Allocate" : status, detail: `Allocated ${allocatedQty} / Short ${shortQty}` };
     setAllocOrders((list) => list.map((o) => (o.id === order.id ? { ...o, status, lines, originalItems: o.originalItems || o.items, orderEvents: [...(o.orderEvents || []), event] } : o)));
-    addTx({ type: "Allocate", detail: `${order.id}: จองสต็อกสำเร็จ (${status}) — Allocated ${allocatedQty} หน่วย / Short ${shortQty} หน่วย`, itemId: null });
+    setSourcePick((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${order.id}|`))));
+    addTx({ type: "Allocate", detail: `${order.id}: จองสต็อกสำเร็จ (${status}) — Allocated ${allocatedQty} หน่วย / Short ${shortQty} หน่วย (${Object.keys(sourcePlan).length ? "Manual location selection" : "Auto allocation"})`, itemId: null });
     if (blockedWarnings.length) {
       const blockedText = blockedWarnings.map((b) => `${b.itemId} · ${itemOf(b.itemId)?.name} ค้างติดสติ๊กเกอร์ ${b.qty}`).join(", ");
       notify("ของพร้อมขายแต่ยังไม่ได้ติดสติ๊กเกอร์", blockedText, "danger");
@@ -3962,12 +4023,18 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
       ))}
 
       {detailOrder && (
-        <Modal onClose={() => setDetailOrderId("")} width={1100}>
+        <Modal onClose={() => setDetailOrderId("")} width={1280}>
           {(() => {
             const lines = normalizedLinesOf(detailOrder);
+            const onhandRows = onhandRowsForOrder(detailOrder);
             const p = orderProgress(detailOrder);
             const progress = Math.min(100, Math.round((p.pickedQty / Math.max(p.originalQty, 1)) * 100));
-            const stockCheckText = p.remainingQty > 0 || detailOrder.status === "Backorder" || detailOrder.status === "Partial" ? `สินค้าไม่พอ ขาด ${p.remainingQty} หน่วย` : p.allocatedQty > 0 ? "สินค้าเพียงพอสำหรับ Order นี้" : "ยังไม่ได้ Allocate";
+            const hasShortage = p.remainingQty > 0 || detailOrder.status === "Backorder" || detailOrder.status === "Partial";
+            const partialReadyText = p.allocatedQty > 0
+              ? `Allocate ได้ ${p.allocatedQty} จาก ${p.originalQty} หน่วย · ขาด ${p.remainingQty} หน่วย · สามารถ Release Partial เพื่อส่งบางส่วนก่อนได้`
+              : `Allocate ได้ 0 จาก ${p.originalQty} หน่วย · ขาด ${p.remainingQty || p.originalQty} หน่วย · ยังไม่มีสินค้าพร้อมส่งบางส่วน`;
+            const stockCheckText = hasShortage ? partialReadyText : p.allocatedQty > 0 ? `สินค้าเพียงพอสำหรับ Order นี้ · Allocate ได้ ${p.allocatedQty} / ${p.originalQty} หน่วย` : "ยังไม่ได้ Allocate";
+            const selectedQty = selectedSourceQty(detailOrder);
             const firstSource = lines.flatMap((l) => (l.sources || []).map((s) => ({ ...s, itemId: l.itemId }))).find(Boolean);
             const toteCount = Math.min(10, Math.max(1, Number(firstSource?.qty || 10)));
             const toteRows = Array.from({ length: toteCount }, (_, i) => ({
@@ -3985,21 +4052,51 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                   <div className="mini-stat"><div className="lbl">Status</div><div className="val"><OrderStatusPill status={detailOrder.status} /></div></div>
                   <div className="mini-stat"><div className="lbl">Original Qty</div><div className="val">{p.originalQty}</div></div>
                   <div className="mini-stat"><div className="lbl">Allocated / Picked</div><div className="val">{p.allocatedQty} / {p.pickedQty}</div></div>
+                  <div className="mini-stat"><div className="lbl">Short / Backlog</div><div className="val" style={{ color: hasShortage ? "var(--danger)" : "var(--success)" }}>{hasShortage ? (p.remainingQty || p.originalQty) : 0}</div></div>
                 </div>
-                <div className={`allocation-shortage`} style={{ marginBottom: 12, color: stockCheckText.includes("ไม่พอ") ? "var(--danger)" : "var(--success)", background: stockCheckText.includes("ไม่พอ") ? "rgba(241,91,113,.12)" : "rgba(32,199,102,.10)", borderColor: stockCheckText.includes("ไม่พอ") ? "rgba(241,91,113,.35)" : "rgba(32,199,102,.25)" }}><AlertTriangle size={14} /><span>{stockCheckText}</span></div>
+                <div className={`allocation-shortage`} style={{ marginBottom: 12, color: hasShortage ? "var(--danger)" : "var(--success)", background: hasShortage ? "rgba(241,91,113,.12)" : "rgba(32,199,102,.10)", borderColor: hasShortage ? "rgba(241,91,113,.35)" : "rgba(32,199,102,.25)" }}><AlertTriangle size={14} /><span>{stockCheckText}</span></div>
                 <div style={{ marginBottom: 14 }}>{utilizationBar(progress)}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-                  {detailOrder.status === "Pending" && <button className="btn" onClick={() => confirmAction({ title: "ยืนยัน Allocate", message: `ต้องการจองสต็อกให้ ${detailOrder.id} หรือไม่`, onConfirm: () => allocate(detailOrder) })}><Lock size={12} /> Allocate</button>}
+                  {detailOrder.status === "Pending" && <>
+                    <button className="btn secondary" onClick={() => confirmAction({ title: "ยืนยัน Auto Allocate", message: `ให้ระบบเลือก Location อัตโนมัติสำหรับ ${detailOrder.id} หรือไม่`, onConfirm: () => allocate(detailOrder) })}><Lock size={12} /> Auto Allocate</button>
+                    <button className="btn" onClick={() => {
+                      const plan = selectedSourcePlan(detailOrder);
+                      if (!selectedQty) return notify("ยังไม่ได้เลือก Location", "กรุณาใส่จำนวนในช่อง Allocate Qty ของ Location ที่ต้องการก่อน", "danger");
+                      confirmAction({ title: "ยืนยัน Allocate ตาม Location", message: `จองสต็อกจาก Location ที่เลือก รวม ${selectedQty} หน่วย สำหรับ ${detailOrder.id} หรือไม่`, onConfirm: () => allocate(detailOrder, plan) });
+                    }}><MapPinned size={12} /> Allocate Selected Location ({selectedQty})</button>
+                  </>}
                   {detailOrder.status === "Allocated" && <><button className="btn secondary" onClick={() => confirmAction({ title: "ยืนยัน Un-Allocate", message: `คืนสต็อกของ ${detailOrder.id} กลับเป็น Available หรือไม่`, onConfirm: () => { unallocate(detailOrder); notify("Un-Allocate สำเร็จ", `${detailOrder.id} คืนสต็อกแล้ว`, "success"); } })}><Unlock size={12} /> Un-Allocate</button><button className="btn" onClick={() => confirmAction({ title: "ยืนยัน Release Order", message: `ปล่อยคำสั่ง ${detailOrder.id} ไป Pick/Robot หรือไม่`, onConfirm: () => { release(detailOrder); notify("Release สำเร็จ", `${detailOrder.id} ถูกส่งเข้า Pick/Robot แล้ว`, "success"); } })}><Send size={12} /> Release Pick / Pack / Ship</button></>}
                   {detailOrder.status === "Partial" && <><button className="btn" onClick={() => confirmAction({ title: "ยืนยัน Release Partial", message: `ส่งสินค้าที่ Allocate ได้ของ ${detailOrder.id} ไปก่อนหรือไม่`, onConfirm: () => releasePartial(detailOrder) })}><Send size={12} /> Release Partial</button><button className="btn secondary" onClick={() => confirmAction({ title: "Cancel Order", message: `ยกเลิก ${detailOrder.id} ทั้ง Order หรือไม่`, kind: "danger", onConfirm: () => cancelOrder(detailOrder) })}><Trash2 size={12} /> Cancel Order</button></>}
                   {["Partial Released", "Backorder"].includes(detailOrder.status) && <><button className="btn" onClick={() => confirmAction({ title: "Re-Allocate Shortage", message: `ลอง Allocate ส่วนที่ค้างของ ${detailOrder.id} อีกครั้งหรือไม่`, onConfirm: () => reallocateShortage(detailOrder) })}><RefreshCw size={12} /> Re-Allocate Shortage</button><button className="btn secondary" onClick={() => confirmAction({ title: "Cancel Shortage", message: `ตัดรายการที่ยังขาดของ ${detailOrder.id} ออกจาก Order หรือไม่`, onConfirm: () => cancelShortage(detailOrder) })}><Trash2 size={12} /> Cancel Shortage</button></>}
                 </div>
+                <div className="section-title" style={{ marginTop: 0 }}>Onhand by Location / เลือกแหล่งจ่าย</div>
+                <div className="kpi-sub" style={{ marginBottom: 10 }}>แสดง Stock ทุก Location ของสินค้าใน Order นี้ ทั้ง Onhand ที่ยังจ่ายได้ และ Qty ที่ถูก Allocate ให้ Order นี้แล้ว จึงไม่หายหลังจากกด Allocate</div>
                 <div className="table-wrap" style={{ marginBottom: 14 }}>
                   <table>
-                    <thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Order Qty</th><th>Location</th><th>LPN</th><th>Source System</th><th>Allocated Qty</th><th>Picked</th><th>Worker / Robot</th></tr></thead>
+                    <thead><tr><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Allocated This Order</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
                     <tbody>
-                      {lines.flatMap((l) => (l.sources?.length ? l.sources : [{ loc: "-", qty: l.qty || 0, system: "-", lpn: "-", pickedQty: 0 }]).map((s, idx) => (
-                        <tr key={`${l.itemId}-${s.loc}-${idx}`}><td className="mono">{l.itemId}</td><td>{itemOf(l.itemId)?.name || "-"}</td><td>{l.qty}</td><td className="mono">{s.loc}</td><td className="mono">{s.lpn || stock.find((r) => r.itemId === l.itemId && r.loc === s.loc)?.lpn || "-"}</td><td>{s.system}</td><td>{s.qty}</td><td>{s.pickedQty || 0}</td><td>{s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === detailOrder.id && t.itemId === l.itemId)?.assignee || "Manual Picker")}</td></tr>
+                      {onhandRows.map((r) => {
+                        const canPick = r.status === "AVL";
+                        const pickKey = sourcePickKey(detailOrder.id, r.itemId, r);
+                        return (
+                          <tr key={pickKey}>
+                            <td style={{ minWidth: 92 }}>
+                              {canPick ? <input type="number" min="0" max={r.qty} value={sourcePick[pickKey] || ""} placeholder="0" onChange={(e) => setSourceQty(detailOrder.id, r.itemId, r, e.target.value)} style={{ width: 72 }} /> : <span className="scan-step done">จองแล้ว</span>}
+                            </td>
+                            <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{r.allocatedQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="section-title" style={{ marginTop: 0 }}>Allocated Source / แหล่งจ่ายที่ถูกจองแล้ว</div>
+                <div className="table-wrap" style={{ marginBottom: 14 }}>
+                  <table>
+                    <thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Order Qty</th><th>Location</th><th>LPN</th><th>Onhand Before</th><th>Location Util.</th><th>Source System</th><th>Allocated Qty</th><th>Picked</th><th>Worker / Robot</th></tr></thead>
+                    <tbody>
+                      {lines.flatMap((l) => (l.sources?.length ? l.sources : [{ loc: "-", qty: 0, system: "-", lpn: "-", pickedQty: 0, shortQty: l.shortfall || l.qty || 0 }]).map((s, idx) => (
+                        <tr key={`${l.itemId}-${s.loc}-${idx}`}><td className="mono">{l.itemId}</td><td>{itemOf(l.itemId)?.name || "-"}</td><td>{l.qty}</td><td className="mono">{s.loc}</td><td className="mono">{s.lpn || stock.find((r) => r.itemId === l.itemId && r.loc === s.loc)?.lpn || "-"}</td><td>{s.onhandBefore ?? "-"}</td><td>{utilizationBar(s.utilPct || locUtil(s.loc).pct)}</td><td>{s.system}</td><td>{s.qty}</td><td>{s.pickedQty || 0}</td><td>{s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === detailOrder.id && t.itemId === l.itemId)?.assignee || "Manual Picker")}</td></tr>
                       )))}
                     </tbody>
                   </table>
