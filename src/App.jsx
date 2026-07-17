@@ -3654,7 +3654,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
           sources.push({ loc: r.loc || "PICK-PACK", system: locOf(r.loc)?.system || "Manual", qty: take, pickedQty: 0, lpn: r.lpn || "-", warehouse: locOf(r.loc)?.plant || "BKK1", onhandBefore: r.qty, utilPct: locUtil(r.loc).pct });
           need -= take;
           next = next.map((row) => (row === r ? { ...row, qty: row.qty - take } : row));
-          next = [...next, { key: Date.now() + Math.random(), itemId: it.itemId, batch: r.batch, lpn: r.lpn, loc: r.loc, qty: take, status: "ALLOC", age: r.age, allocatedFor: order.id }];
+          next = [...next, { ...r, key: Date.now() + Math.random(), qty: take, status: "ALLOC", allocatedFor: order.id }];
         }
         lines.push({ itemId: it.itemId, qty: it.qty, available: availableNow.reduce((a, r) => a + Number(r.qty || 0), 0), sources, shortfall: need, stickerBlockedQty: blockedQty, allocationMode: selectedMode ? "Manual Location" : "Auto" });
       });
@@ -3668,6 +3668,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
     const event = { t: new Date().toISOString(), type: status === "Partial" ? "Partial Allocate" : status, detail: `Allocated ${allocatedQty} / Short ${shortQty}` };
     setAllocOrders((list) => list.map((o) => (o.id === order.id ? { ...o, status, lines, originalItems: o.originalItems || o.items, orderEvents: [...(o.orderEvents || []), event] } : o)));
     setSourcePick((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${order.id}|`))));
+    setSourceChecked((prev) => Object.fromEntries(Object.entries(prev).filter(([key]) => !key.startsWith(`${order.id}|`))));
     addTx({ type: "Allocate", detail: `${order.id}: จองสต็อกสำเร็จ (${status}) — Allocated ${allocatedQty} หน่วย / Short ${shortQty} หน่วย (${Object.keys(sourcePlan).length ? "Manual location selection" : "Auto allocation"})`, itemId: null });
     if (blockedWarnings.length) {
       const blockedText = blockedWarnings.map((b) => `${b.itemId} · ${itemOf(b.itemId)?.name} ค้างติดสติ๊กเกอร์ ${b.qty}`).join(", ");
