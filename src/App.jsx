@@ -421,7 +421,7 @@ const NAV_GROUPS = [
       { id: "warehouse3d", label: "3D Warehouse Space", icon: Box },
       { id: "recall", label: "Total Recall Product", icon: RefreshCw },
       { id: "recallprework", label: "Total Recall Prework", icon: Tags },
-      { id: "people", label: "Productivity & Users", icon: Users },
+      { id: "people", label: "Productivity Dashboard", icon: Users },
       { id: "rodocs", label: "RO / RI Billing", icon: FileText },
     ]
   },
@@ -5225,6 +5225,16 @@ function Productivity({ users, setUsers }) {
   });
   const filtered = role === "ALL" ? withTier : withTier.filter((u) => u.role === role);
   const hours = ["08", "09", "10", "11", "13", "14", "15", "16"];
+  const productivityHours = Array.from({ length: 25 }, (_, i) => String(i).padStart(2, "0"));
+  const productivityRows = productivityHours.map((h, idx) => {
+    const wave = Math.max(0, Math.sin(((idx - 6) / 24) * Math.PI));
+    const rush = [9, 10, 11, 14, 15, 16, 20].includes(idx) ? 1 : 0;
+    const orderQty = Math.round(8 + wave * 72 + rush * 18 + (idx % 4) * 4);
+    const pieceQty = Math.round(orderQty * (7 + (idx % 5) * 1.6));
+    return { hour: `${h}:00`, orderQty, pieceQty };
+  });
+  const maxOrderQty = Math.max(...productivityRows.map((r) => r.orderQty), 1);
+  const maxPieceQty = Math.max(...productivityRows.map((r) => r.pieceQty), 1);
   const hourlyRows = hours.map((h, idx) => {
     const row = { hour: `${h}:00` };
     filtered.slice(0, 5).forEach((u, ui) => { row[u.name] = Math.max(0, Math.round((u.linesPerHour / 8) * (0.75 + ((idx + ui) % 4) * 0.12))); });
@@ -5240,6 +5250,33 @@ function Productivity({ users, setUsers }) {
   return (
     <>
       <div style={{ marginBottom: 14 }}><button className="btn" onClick={() => setAddOpen(true)}><Users size={13} /> Setup User ใหม่</button></div>
+      <div className="lp-panel productivity-dashboard-panel" style={{ marginBottom: 14 }}>
+        <div className="productivity-head">
+          <div>
+            <h3>Productivity Dashboard</h3>
+            <div className="kpi-sub">Bi-directional hourly chart · 00:00 ถึง 24:00 · ซ้าย = Order · ขวา = Pieces</div>
+          </div>
+          <div className="productivity-legend">
+            <span><i className="order"></i> Order</span>
+            <span><i className="piece"></i> Pieces</span>
+          </div>
+        </div>
+        <div className="productivity-mirror-chart">
+          {productivityRows.map((r) => (
+            <div className="productivity-mirror-row" key={r.hour}>
+              <div className="mirror-side mirror-left">
+                <span className="mirror-value mono">{r.orderQty}</span>
+                <div className="mirror-track"><div className="mirror-bar order" style={{ width: `${Math.max(4, (r.orderQty / maxOrderQty) * 100)}%` }} /></div>
+              </div>
+              <div className="mirror-time mono">{r.hour}</div>
+              <div className="mirror-side mirror-right">
+                <div className="mirror-track"><div className="mirror-bar piece" style={{ width: `${Math.max(4, (r.pieceQty / maxPieceQty) * 100)}%` }} /></div>
+                <span className="mirror-value mono">{r.pieceQty}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="strategy-toolbar">
         <span className={`chip ${role === "ALL" ? "active" : ""}`} onClick={() => setRole("ALL")}>ทุกแผนก</span>
         {roles.map((r) => (<span key={r} className={`chip ${role === r ? "active" : ""}`} onClick={() => setRole(r)}>{r}</span>))}
@@ -5802,6 +5839,24 @@ function GlobalStyle() {
       .light-dashboard{background:var(--bg);margin:-24px;padding:24px;min-height:100%;}
       .lp-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;}
       .lp-panel h3{margin:0 0 4px;font-size:12.5px;color:var(--muted);font-weight:500;}
+      .productivity-dashboard-panel{padding:18px 18px 16px;overflow:hidden;}
+      .productivity-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;}
+      .productivity-head h3{font-size:17px;color:var(--text);font-weight:800;margin:0 0 2px;}
+      .productivity-legend{display:flex;gap:14px;align-items:center;color:var(--muted);font-size:12px;font-weight:700;white-space:nowrap;}
+      .productivity-legend span{display:inline-flex;align-items:center;gap:6px;}
+      .productivity-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+      .productivity-legend i.order{background:#2F67FF;}.productivity-legend i.piece{background:#20C766;}
+      .productivity-mirror-chart{display:grid;gap:5px;padding:6px 0 2px;}
+      .productivity-mirror-row{display:grid;grid-template-columns:minmax(180px,1fr) 64px minmax(180px,1fr);align-items:center;gap:10px;min-height:22px;}
+      .mirror-side{display:grid;align-items:center;gap:8px;}
+      .mirror-left{grid-template-columns:46px 1fr;}.mirror-right{grid-template-columns:1fr 58px;}
+      .mirror-track{height:14px;background:#EDF2F8;border:1px solid #DCE5F0;border-radius:999px;overflow:hidden;position:relative;}
+      .mirror-left .mirror-track{display:flex;justify-content:flex-end;}
+      .mirror-bar{height:100%;border-radius:999px;box-shadow:0 5px 12px rgba(47,103,255,.14);}
+      .mirror-bar.order{background:linear-gradient(90deg,#6FA0FF,#2F67FF);}.mirror-bar.piece{background:linear-gradient(90deg,#20C766,#79D98F);}
+      .mirror-time{height:24px;display:flex;align-items:center;justify-content:center;border-left:1px solid #D6DEE8;border-right:1px solid #D6DEE8;color:#17213A;font-weight:800;font-size:11px;background:#F8FBFF;border-radius:6px;}
+      .mirror-value{font-size:11px;color:var(--muted);font-weight:800;}
+      .mirror-left .mirror-value{text-align:right;}.mirror-right .mirror-value{text-align:left;}
 
       .lp-card{--tone:var(--amber);--tone-soft:rgba(62,126,224,.1);--tone-ring:rgba(62,126,224,.22);display:flex;gap:14px;align-items:flex-start;border-radius:12px;padding:16px;border:1px solid transparent;box-shadow:0 2px 6px rgba(22,35,61,0.08);position:relative;overflow:hidden;}
       .lp-card::before{content:'';position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 6px 6px 0;background:var(--tone);opacity:.85;}
@@ -5832,6 +5887,7 @@ function GlobalStyle() {
     `}</style>
   );
 }
+
 
 
 
