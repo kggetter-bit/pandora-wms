@@ -2761,7 +2761,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
               <div className="field"><label>PO Number</label><input value={active.po} disabled /></div>
               <div className="field"><label>จำนวนที่คาดรับ</label><input value={activeLine?.expQty || 0} disabled /></div>
               <div className="field"><label>จำนวนที่รับจริง</label><input type="number" value={qty} onChange={(e) => setQty(e.target.value)} /></div>
-              <div className="grid g2">
+              <div className="grid g2 receiving-date-grid">
                 <div className="field"><label>วันที่รับเข้า</label><input value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} placeholder="2569-07-23" /></div>
                 <div className="field"><label>วันผลิตสินค้า (MFG Date)</label><input value={mfgDate} onChange={(e) => setMfgDate(e.target.value)} placeholder="2569-06-01" /></div>
               </div>
@@ -5719,8 +5719,11 @@ function GlobalStyle() {
       .tag-status.Completed{background:var(--success);}
       .tag-status.Hold{background:var(--danger);}
       .prio{font-size:11.5px;} .prio.vip{color:var(--amber);font-weight:600;} .prio.sla{color:var(--danger);font-weight:600;} .prio.normal{color:var(--muted);}
-      .handheld{max-width:300px;background:#000;border:3px solid #333;border-radius:22px;padding:16px;box-shadow:0 0 0 6px var(--panel-raised), 0 4px 14px rgba(22,35,61,0.24);}
-      .handheld-screen{background:var(--panel);border-radius:10px;padding:16px;min-height:300px;}
+      .handheld{width:370px;max-width:100%;background:#000;border:3px solid #333;border-radius:22px;padding:16px;box-shadow:0 0 0 6px var(--panel-raised), 0 4px 14px rgba(22,35,61,0.24);}
+      .handheld-screen{background:var(--panel);border-radius:10px;padding:16px;min-height:300px;overflow:hidden;}
+      .handheld .receiving-date-grid{grid-template-columns:1fr;gap:0;}
+      .handheld .scan-step{white-space:normal;line-height:1.35;align-items:flex-start;}
+      .handheld .allocation-shortage{align-items:flex-start;line-height:1.35;}
       .recall-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
       @media (max-width:800px){.recall-split{grid-template-columns:1fr;}}
       .recall-col{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;}
