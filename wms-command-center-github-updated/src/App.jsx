@@ -1958,11 +1958,11 @@ function MasterData() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>SYNNEX ID</th><th>Item ID</th><th>Part ID</th><th>Part No.</th><th>Brand</th><th>ชื่อสินค้า</th><th>ต้องติด Sticker</th><th>Sticker Size</th><th>Receiving Age Rule</th><th>ABC</th><th>Size</th><th>TixHi</th><th>Length cm</th><th>Width cm</th><th>Height cm</th><th>Weight kg</th><th></th></tr></thead>
+              <thead><tr><th>SYNNEX ID</th><th>Item ID</th><th>Brand</th><th>ชื่อสินค้า</th><th>Receiving Min Age</th><th>Receiving Max Age</th><th>ต้องติด Sticker</th><th>Sticker Size</th><th>Part ID</th><th>Part No.</th><th>ABC</th><th>Size</th><th>TixHi</th><th>Length cm</th><th>Width cm</th><th>Height cm</th><th>Weight kg</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((it) => (
                   <tr key={it.id} className="clickable" onClick={() => setDetail(it)}>
-                    <td className="mono">{it.id}</td><td className="mono">{it.itemCode}</td><td className="mono">{it.partId}</td><td className="mono">{it.partNo}</td><td>{it.brand}</td><td>{it.name}</td><td>{it.stickerRequired ? <span className="scan-step done">ต้องติด</span> : <span className="kpi-sub">ไม่ต้องติด</span>}</td><td><span className="status-badge" style={{ background: "var(--teal)" }}>{stickerSizeForItem(it)}</span></td><td className="mono">{receivingAgeRuleOf(it).minAgeDays}-{receivingAgeRuleOf(it).maxAgeDays} วัน</td>
+                    <td className="mono">{it.id}</td><td className="mono">{it.itemCode}</td><td>{it.brand}</td><td>{it.name}</td><td className="mono">{receivingAgeRuleOf(it).minAgeDays} วัน</td><td className="mono">{receivingAgeRuleOf(it).maxAgeDays} วัน</td><td>{it.stickerRequired ? <span className="scan-step done">ต้องติด</span> : <span className="kpi-sub">ไม่ต้องติด</span>}</td><td><span className="status-badge" style={{ background: "var(--teal)" }}>{stickerSizeForItem(it)}</span></td><td className="mono">{it.partId}</td><td className="mono">{it.partNo}</td>
                     <td><span className={`badge ${it.abc}`}>{it.abc}</span></td><td><SizeBadge item={it} /></td><td className="mono">{it.tixHi}</td>
                     <td className="mono">{it.dim.l}</td><td className="mono">{it.dim.w}</td><td className="mono">{it.dim.h}</td><td className="mono">{it.dim.wt}</td>
                     <td style={{ display: "flex", gap: 6 }}>
@@ -2733,7 +2733,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
         {pending.map((p) => (
           <div className="po-row" key={p.po}>
             <ScanLine size={20} color="var(--teal)" />
-            <div className="po-info"><div className="sup">{p.supplier} <span className="po-id">· {p.po}</span></div><div className="meta">{poLinesOf(p).length} รายการ · คาดรับ {poExpectedQty(p)} หน่วย · {p.dock}</div></div>
+            <div className="po-info"><div className="sup">{p.supplier} <span className="po-id">· {p.po}</span></div><div className="meta">{poLinesOf(p).length} รายการ · คาดรับ {poExpectedQty(p)} หน่วย · {p.dock} · Age Rule {receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).minAgeDays}-{receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).maxAgeDays} วัน</div></div>
             <button className="btn" onClick={() => openPo(p)}>เปิด Handheld <ArrowRight size={13} /></button>
           </div>
         ))}
@@ -2757,6 +2757,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
                 {poLinesOf(active).map((l, i) => <span key={i} className={`chip ${lineIdx === i ? "active" : ""}`} onClick={() => switchLine(i)}>Line {i + 1}</span>)}
               </div>
               <div className="item-heading"><ItemCell itemId={activeLine?.itemId} /></div>
+              <div className="scan-step" style={{ display: "inline-flex", marginBottom: 10, color: "var(--amber)", background: "rgba(62,126,224,.12)" }}><ShieldAlert size={11} /> ตรวจอายุรับเข้า: รับได้ {ageCheck.rule.minAgeDays}-{ageCheck.rule.maxAgeDays} วัน นับจากวันผลิตถึงวันที่รับเข้า</div>
               <div className="field"><label>PO Number</label><input value={active.po} disabled /></div>
               <div className="field"><label>จำนวนที่คาดรับ</label><input value={activeLine?.expQty || 0} disabled /></div>
               <div className="field"><label>จำนวนที่รับจริง</label><input type="number" value={qty} onChange={(e) => setQty(e.target.value)} /></div>
