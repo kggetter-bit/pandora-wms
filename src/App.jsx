@@ -167,6 +167,32 @@ const SYNNEX_SALES_CODES = [
 ];
 const formatSynnexId = (project, sales, item) => `${String(project).padStart(3, "0")}${String(sales).padStart(3, "0")}${String(item).padStart(4, "0")}`;
 const prettySynnexId = (id) => `${String(id).slice(0, 3)}-${String(id).slice(3, 6)}-${String(id).slice(6, 10)}`;
+const parseWmsDate = (value) => {
+  const raw = String(value || "").trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const year = Number(m[1]) > 2400 ? Number(m[1]) - 543 : Number(m[1]);
+  return new Date(Date.UTC(year, Number(m[2]) - 1, Number(m[3])));
+};
+const daysBetweenWmsDates = (fromDate, toDate) => {
+  const from = parseWmsDate(fromDate);
+  const to = parseWmsDate(toDate);
+  if (!from || !to) return null;
+  return Math.floor((to.getTime() - from.getTime()) / 86400000);
+};
+const receivingAgeRuleOf = (item) => ({
+  minAgeDays: Number(item?.receiveMinAgeDays ?? item?.receivingAgeRule?.minAgeDays ?? 0),
+  maxAgeDays: Number(item?.receiveMaxAgeDays ?? item?.receivingAgeRule?.maxAgeDays ?? 3650),
+});
+const receivingAgeCheck = (item, mfgDate, receiveDate) => {
+  const ageDays = daysBetweenWmsDates(mfgDate, receiveDate);
+  const rule = receivingAgeRuleOf(item);
+  if (ageDays === null) return { ok: false, ageDays: null, rule, message: "กรุณาระบุวันที่รับเข้าและวันผลิตสินค้าให้ถูกต้อง" };
+  if (ageDays < 0) return { ok: false, ageDays, rule, message: "วันผลิตสินค้าอยู่หลังวันที่รับเข้า ระบบรับสินค้าไม่ได้" };
+  if (ageDays < rule.minAgeDays) return { ok: false, ageDays, rule, message: `อายุสินค้า ${ageDays} วัน ต่ำกว่าเงื่อนไขขั้นต่ำ ${rule.minAgeDays} วัน` };
+  if (ageDays > rule.maxAgeDays) return { ok: false, ageDays, rule, message: `อายุสินค้า ${ageDays} วัน เกินเงื่อนไขรับเข้า ${rule.maxAgeDays} วัน` };
+  return { ok: true, ageDays, rule, message: `อายุสินค้า ${ageDays} วัน ผ่านเงื่อนไขรับเข้า (${rule.minAgeDays}-${rule.maxAgeDays} วัน)` };
+};
 const stickerStateOfStock = (row) => {
   const item = itemOf(row?.itemId);
   if (!item?.stickerRequired) return { required: false, code: "N/A", label: "ไม่ต้องติด", ok: true };
@@ -1893,8 +1919,9 @@ function MasterData() {
   const filtered = ITEMS.filter((it) => (it.name + it.id + it.itemCode + it.partId + it.partNo + it.brand).toLowerCase().includes(q.toLowerCase()));
 
   const saveItem = (form) => {
-    if (form._editing) ITEMS = ITEMS.map((it) => (it.id === form.id ? form : it));
-    else ITEMS = [...ITEMS, form];
+    const clean = { ...form, receiveMinAgeDays: Number(form.receiveMinAgeDays ?? 0), receiveMaxAgeDays: Number(form.receiveMaxAgeDays ?? 3650) };
+    if (clean._editing) ITEMS = ITEMS.map((it) => (it.id === clean.id ? clean : it));
+    else ITEMS = [...ITEMS, clean];
     setItemModal(null); bump();
   };
   const saveLoc = (form) => {
@@ -1927,15 +1954,15 @@ function MasterData() {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
             <div className="search-box" style={{ marginBottom: 0 }}><Search size={15} color="var(--muted)" /><input placeholder="ค้นหา SYNNEX ID / Item ID / Part ID / Part No / Brand / ชื่อสินค้า…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-            <button className="btn" onClick={() => setItemModal({ id: "", partId: "", itemCode: "", brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })}><PlusCircle size={13} /> เพิ่มสินค้าใหม่</button>
+            <button className="btn" onClick={() => setItemModal({ id: "", partId: "", itemCode: "", brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })}><PlusCircle size={13} /> เพิ่มสินค้าใหม่</button>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>SYNNEX ID</th><th>Item ID</th><th>Part ID</th><th>Part No.</th><th>Brand</th><th>ชื่อสินค้า</th><th>ต้องติด Sticker</th><th>Sticker Size</th><th>ABC</th><th>Size</th><th>TixHi</th><th>Length cm</th><th>Width cm</th><th>Height cm</th><th>Weight kg</th><th></th></tr></thead>
+              <thead><tr><th>SYNNEX ID</th><th>Item ID</th><th>Brand</th><th>ชื่อสินค้า</th><th>Receiving Min Age</th><th>Receiving Max Age</th><th>ต้องติด Sticker</th><th>Sticker Size</th><th>Part ID</th><th>Part No.</th><th>ABC</th><th>Size</th><th>TixHi</th><th>Length cm</th><th>Width cm</th><th>Height cm</th><th>Weight kg</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((it) => (
                   <tr key={it.id} className="clickable" onClick={() => setDetail(it)}>
-                    <td className="mono">{it.id}</td><td className="mono">{it.itemCode}</td><td className="mono">{it.partId}</td><td className="mono">{it.partNo}</td><td>{it.brand}</td><td>{it.name}</td><td>{it.stickerRequired ? <span className="scan-step done">ต้องติด</span> : <span className="kpi-sub">ไม่ต้องติด</span>}</td><td><span className="status-badge" style={{ background: "var(--teal)" }}>{stickerSizeForItem(it)}</span></td>
+                    <td className="mono">{it.id}</td><td className="mono">{it.itemCode}</td><td>{it.brand}</td><td>{it.name}</td><td className="mono">{receivingAgeRuleOf(it).minAgeDays} วัน</td><td className="mono">{receivingAgeRuleOf(it).maxAgeDays} วัน</td><td>{it.stickerRequired ? <span className="scan-step done">ต้องติด</span> : <span className="kpi-sub">ไม่ต้องติด</span>}</td><td><span className="status-badge" style={{ background: "var(--teal)" }}>{stickerSizeForItem(it)}</span></td><td className="mono">{it.partId}</td><td className="mono">{it.partNo}</td>
                     <td><span className={`badge ${it.abc}`}>{it.abc}</span></td><td><SizeBadge item={it} /></td><td className="mono">{it.tixHi}</td>
                     <td className="mono">{it.dim.l}</td><td className="mono">{it.dim.w}</td><td className="mono">{it.dim.h}</td><td className="mono">{it.dim.wt}</td>
                     <td style={{ display: "flex", gap: 6 }}>
@@ -1950,7 +1977,7 @@ function MasterData() {
         </>
       )}
 
-      {tab === "synnex" && <SynnexIdRulePanel onCreateItem={(id) => setItemModal({ id, partId: "", itemCode: id, brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })} />}
+      {tab === "synnex" && <SynnexIdRulePanel onCreateItem={(id) => setItemModal({ id, partId: "", itemCode: id, brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })} />}
 
       {tab === "loc" && (
         <>
@@ -2052,6 +2079,7 @@ function MasterData() {
             <div className="mini-stat"><div className="lbl">Size Group</div><div className="val"><SizeBadge item={detail} /> <span className="mono" style={{ marginLeft: 6 }}>{sizeGroupOf(detail).name}</span></div></div>
             <div className="mini-stat"><div className="lbl">Dimension</div><div className="val mono">{detail.dim.l}x{detail.dim.w}x{detail.dim.h} ซม.</div></div>
             <div className="mini-stat"><div className="lbl">น้ำหนัก</div><div className="val mono">{detail.dim.wt} กก.</div></div>
+            <div className="mini-stat"><div className="lbl">Receiving Age Rule</div><div className="val mono">{receivingAgeRuleOf(detail).minAgeDays}-{receivingAgeRuleOf(detail).maxAgeDays} วัน</div></div>
           </div>
           <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 6 }}>Pack Key</div>
           <div className="table-wrap">
@@ -2182,6 +2210,11 @@ function ItemFormModal({ form: init, onClose, onSave }) {
       <div className="grid g2">
         <div className="field"><label>TixHi (Ti x Hi)</label><input value={f.tixHi} onChange={(e) => setF({ ...f, tixHi: e.target.value })} placeholder="เช่น 8x5" /></div>
         <div className="field"><label>ยอดขายเฉลี่ย/วัน</label><input type="number" value={f.dailySales} onChange={(e) => setF({ ...f, dailySales: Number(e.target.value) })} /></div>
+      </div>
+      <div className="kpi-sub" style={{ margin: "4px 0 8px" }}>Receiving Age Rule / เงื่อนไขอายุสินค้าตอนรับเข้า</div>
+      <div className="grid g2">
+        <div className="field"><label>Min Age Days</label><input type="number" value={f.receiveMinAgeDays ?? 0} onChange={(e) => setF({ ...f, receiveMinAgeDays: Number(e.target.value) })} /></div>
+        <div className="field"><label>Max Age Days (Reject if older)</label><input type="number" value={f.receiveMaxAgeDays ?? 3650} onChange={(e) => setF({ ...f, receiveMaxAgeDays: Number(e.target.value) })} /></div>
       </div>
       <div className="kpi-sub" style={{ margin: "4px 0 8px" }}>Dimension (ซม. / กก.)</div>
       <div className="grid g4">
@@ -2477,7 +2510,7 @@ function AppointmentScheduling({ dockSlots, setDockSlots, poList, setPoList, add
 /* RECEIVING                                                            */
 /* ================================================================== */
 
-function Receiving({ dockSlots, setDockSlots, poList, setPoList, setStock, addTx, serialUnits, setSerialUnits }) {
+function Receiving({ dockSlots, setDockSlots, poList, setPoList, setStock, addTx, serialUnits, setSerialUnits, notify = () => {} }) {
   const [tab, setTab] = useState("dock");
   const [booking, setBooking] = useState(false);
   const [form, setForm] = useState({ supplier: "", time: "", dock: "Dock-1", plate: "" });
@@ -2604,13 +2637,13 @@ function Receiving({ dockSlots, setDockSlots, poList, setPoList, setStock, addTx
           })}
         </>
       )}
-      {tab === "hh" && <HandheldReceiving poList={poList} setPoList={setPoList} setStock={setStock} addTx={addTx} serialUnits={serialUnits} setSerialUnits={setSerialUnits} />}
+      {tab === "hh" && <HandheldReceiving poList={poList} setPoList={setPoList} setStock={setStock} addTx={addTx} serialUnits={serialUnits} setSerialUnits={setSerialUnits} notify={notify} />}
       {tab === "sum" && <ReceivingSummary poList={poList} serialUnits={serialUnits} />}
     </>
   );
 }
 
-function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, setSerialUnits }) {
+function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, setSerialUnits, notify = () => {} }) {
   const [active, setActive] = useState(null);
   const [lineIdx, setLineIdx] = useState(0);
   const [qty, setQty] = useState("");
@@ -2618,16 +2651,20 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
   const [trackingLevel, setTrackingLevel] = useState("Piece");
   const [scanText, setScanText] = useState("");
   const [requireSerial, setRequireSerial] = useState(true);
+  const [receiveDate, setReceiveDate] = useState("2569-07-23");
+  const [mfgDate, setMfgDate] = useState("2569-06-01");
   const [printed, setPrinted] = useState(false);
   const activeLine = active ? poLinesOf(active)[lineIdx] : null;
+  const activeItem = itemOf(activeLine?.itemId || active?.itemId);
+  const ageCheck = active ? receivingAgeCheck(activeItem, mfgDate, receiveDate) : { ok: true, ageDays: 0, rule: receivingAgeRuleOf(activeItem), message: "" };
   const openPo = (po) => {
     const first = poLinesOf(po)[0];
     setActive(po); setLineIdx(0); setQty(String(first?.expQty || po.expQty)); setRemark("ครบถ้วน");
-    setTrackingLevel(first?.trackingLevel || "Piece"); setRequireSerial(first?.needSn || first?.needImei || false); setScanText(""); setPrinted(false);
+    setTrackingLevel(first?.trackingLevel || "Piece"); setRequireSerial(first?.needSn || first?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPrinted(false);
   };
   const switchLine = (idx) => {
     const line = poLinesOf(active)[idx];
-    setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setPrinted(false);
+    setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPrinted(false);
   };
 
   const parseScans = (actual, itemId, lpn) => {
@@ -2659,22 +2696,30 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
     const actual = parseInt(qty || "0", 10);
     const line = activeLine;
     const expected = Number(line?.expQty || active.expQty || 0);
-    const status = actual >= expected ? "รับครบ" : actual === 0 ? "ปฏิเสธรับ" : "รับไม่ครบ";
     const itemId = line?.itemId || active.itemId;
+    const item = itemOf(itemId);
+    const currentAgeCheck = receivingAgeCheck(item, mfgDate, receiveDate);
+    const isAgeReject = !currentAgeCheck.ok;
+    const status = isAgeReject ? "ปฏิเสธรับ" : actual >= expected ? "รับครบ" : actual === 0 ? "ปฏิเสธรับ" : "รับไม่ครบ";
+    const finalRemark = isAgeReject ? `Reject อายุสินค้า: ${currentAgeCheck.message}` : remark;
     setPoList((list) => list.map((p) => {
       if (p.po !== active.po) return p;
-      const lines = poLinesOf(p).map((l, i) => (i === lineIdx ? { ...l, actualQty: actual, remark, status, trackingLevel, needSn: requireSerial ? l.needSn : false, needImei: requireSerial ? l.needImei : false } : l));
+      const lines = poLinesOf(p).map((l, i) => (i === lineIdx ? { ...l, actualQty: isAgeReject ? 0 : actual, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, remark: finalRemark, status, trackingLevel, needSn: requireSerial ? l.needSn : false, needImei: requireSerial ? l.needImei : false } : l));
       const allDone = lines.every((l) => l.status && l.status !== "Pending");
       const totalActual = lines.reduce((a, l) => a + (Number(l.actualQty) || 0), 0);
       return { ...p, lines, actualQty: totalActual, remark: allDone ? "รับครบทุก Line" : "รับบาง Line", status: allDone ? (lines.every((l) => l.status === "รับครบ") ? "รับครบ" : "รับไม่ครบ") : "Pending" };
     }));
-    if (actual > 0 && remark !== "ปฏิเสธรับ (Reject)") {
+    if (isAgeReject) {
+      addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ถูก Reject ตอนรับเข้า: ${currentAgeCheck.message} · Receive ${receiveDate} · MFG ${mfgDate}`, itemId, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: "REJECT", loc: "REJECT" });
+      notify("Handheld Reject รับสินค้า", `${active.po} · ${item?.name}: ${currentAgeCheck.message}`, "danger");
+    }
+    if (!isAgeReject && actual > 0 && remark !== "ปฏิเสธรับ (Reject)") {
       const stockStatus = remark === "สินค้าเสียหาย" ? "DMG" : "QC";
       const lpn = `LPN-${rand(20000, 99999)}`;
       const stagingLoc = stockStatus === "QC" ? "STAGING-QC" : "RECV-DOCK";
-      setStock((list) => [...list, { key: Date.now() + Math.random(), itemId, batch: `RCV-${active.po}`, lpn, loc: stagingLoc, qty: actual, status: stockStatus, age: 0 }]);
+      setStock((list) => [...list, { key: Date.now() + Math.random(), itemId, batch: `RCV-${active.po}`, lpn, loc: stagingLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule }]);
       setSerialUnits((list) => [...parseScans(actual, itemId, lpn), ...list]);
-      addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} รับจริง ${actual}/${expected} → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
+      addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} รับจริง ${actual}/${expected} · MFG ${mfgDate} · อายุ ${currentAgeCheck.ageDays} วัน → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
     }
     setPrinted(true);
   };
@@ -2688,7 +2733,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
         {pending.map((p) => (
           <div className="po-row" key={p.po}>
             <ScanLine size={20} color="var(--teal)" />
-            <div className="po-info"><div className="sup">{p.supplier} <span className="po-id">· {p.po}</span></div><div className="meta">{poLinesOf(p).length} รายการ · คาดรับ {poExpectedQty(p)} หน่วย · {p.dock}</div></div>
+            <div className="po-info"><div className="sup">{p.supplier} <span className="po-id">· {p.po}</span></div><div className="meta">{poLinesOf(p).length} รายการ · คาดรับ {poExpectedQty(p)} หน่วย · {p.dock} · Age Rule {receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).minAgeDays}-{receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).maxAgeDays} วัน</div></div>
             <button className="btn" onClick={() => openPo(p)}>เปิด Handheld <ArrowRight size={13} /></button>
           </div>
         ))}
@@ -2712,9 +2757,18 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
                 {poLinesOf(active).map((l, i) => <span key={i} className={`chip ${lineIdx === i ? "active" : ""}`} onClick={() => switchLine(i)}>Line {i + 1}</span>)}
               </div>
               <div className="item-heading"><ItemCell itemId={activeLine?.itemId} /></div>
+              <div className="scan-step" style={{ display: "inline-flex", marginBottom: 10, color: "var(--amber)", background: "rgba(62,126,224,.12)" }}><ShieldAlert size={11} /> ตรวจอายุรับเข้า: รับได้ {ageCheck.rule.minAgeDays}-{ageCheck.rule.maxAgeDays} วัน นับจากวันผลิตถึงวันที่รับเข้า</div>
               <div className="field"><label>PO Number</label><input value={active.po} disabled /></div>
               <div className="field"><label>จำนวนที่คาดรับ</label><input value={activeLine?.expQty || 0} disabled /></div>
               <div className="field"><label>จำนวนที่รับจริง</label><input type="number" value={qty} onChange={(e) => setQty(e.target.value)} /></div>
+              <div className="grid g2">
+                <div className="field"><label>วันที่รับเข้า</label><input value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} placeholder="2569-07-23" /></div>
+                <div className="field"><label>วันผลิตสินค้า (MFG Date)</label><input value={mfgDate} onChange={(e) => setMfgDate(e.target.value)} placeholder="2569-06-01" /></div>
+              </div>
+              <div className={`allocation-shortage`} style={{ color: ageCheck.ok ? "var(--success)" : "var(--danger)", background: ageCheck.ok ? "rgba(32,199,102,.10)" : "rgba(241,91,113,.12)", borderColor: ageCheck.ok ? "rgba(32,199,102,.25)" : "rgba(241,91,113,.35)" }}>
+                {ageCheck.ok ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
+                <span>{ageCheck.message} · Rule: {ageCheck.rule.minAgeDays}-{ageCheck.rule.maxAgeDays} วัน</span>
+              </div>
               <div className="field"><label>รับระดับ</label><select value={trackingLevel} onChange={(e) => setTrackingLevel(e.target.value)}><option>Piece</option><option>Box</option><option>Pallet</option></select></div>
               <label className="checkline"><input type="checkbox" checked={requireSerial} onChange={(e) => setRequireSerial(e.target.checked)} /> เปิดโหมดบังคับสแกน SN / IMEI สำหรับ PO Line นี้</label>
               <div className="field"><label>{requireSerial ? "SN / IMEI Scan Records" : "Scan Item only แล้วออก LPN"}</label><textarea rows={4} value={scanText} onChange={(e) => setScanText(e.target.value)} disabled={!requireSerial} placeholder={requireSerial ? "รูปแบบ: SN, IMEI, Level, Qty\nเช่น SN-A001, 356789123456789, Piece, 1\nหรือ BOX-001, , Box, 24" : "PO นี้ไม่บังคับ SN / IMEI: รับจำนวนจริงแล้วระบบจะออก LPN ให้ทันที"} /></div>
@@ -2723,7 +2777,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
                   <option>ครบถ้วน</option><option>ขาดจำนวน</option><option>สินค้าเกิน</option><option>สินค้าเสียหาย</option><option>ปฏิเสธรับ (Reject)</option>
                 </select>
               </div>
-              <button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={confirm}><CheckCircle2 size={13} /> ยืนยันรับสินค้า</button>
+              <button className="btn" style={{ width: "100%", justifyContent: "center", background: ageCheck.ok ? undefined : "var(--danger)", color: ageCheck.ok ? undefined : "#FFFFFF" }} onClick={confirm}>{ageCheck.ok ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />} {ageCheck.ok ? "ยืนยันรับสินค้า" : "Reject รับสินค้า"}</button>
             </>
           )}
           {active && printed && (
@@ -2731,9 +2785,9 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
               <Printer size={30} color="var(--teal)" style={{ marginBottom: 10 }} />
               <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, marginBottom: 6 }}>ใบรับสินค้า (Receiving Slip)</div>
               <div className="kpi-sub">{active.po} · Line {lineIdx + 1} · {activeLine?.itemId} · {itemOf(activeLine?.itemId)?.name}</div>
-              <div className="kpi-sub" style={{ margin: "8px 0" }}>รับจริง {qty} / {activeLine?.expQty} หน่วย — {remark}</div>
-              <div className="scan-step done" style={{ display: "inline-flex", marginBottom: 8 }}><ShieldCheck size={11} /> บันทึก SN/IMEI แล้ว {serialUnits.filter((u) => u.po === active.po).length} record</div><br />
-              <div className="scan-step done" style={{ display: "inline-flex", marginBottom: 14 }}><CheckCircle2 size={11} /> พิมพ์ LPN Label สำเร็จ</div><br />
+              <div className="kpi-sub" style={{ margin: "8px 0" }}>รับจริง {ageCheck.ok ? qty : 0} / {activeLine?.expQty} หน่วย — {ageCheck.ok ? remark : `Reject: ${ageCheck.message}`}</div>
+              <div className={`scan-step ${ageCheck.ok ? "done" : ""}`} style={{ display: "inline-flex", marginBottom: 8, color: ageCheck.ok ? undefined : "var(--danger)", background: ageCheck.ok ? undefined : "rgba(241,91,113,.10)" }}>{ageCheck.ok ? <ShieldCheck size={11} /> : <ShieldAlert size={11} />} อายุสินค้า {ageCheck.ageDays ?? "-"} วัน · MFG {mfgDate} · รับเข้า {receiveDate}</div><br />
+              {ageCheck.ok ? <><div className="scan-step done" style={{ display: "inline-flex", marginBottom: 8 }}><ShieldCheck size={11} /> บันทึก SN/IMEI แล้ว {serialUnits.filter((u) => u.po === active.po).length} record</div><br /><div className="scan-step done" style={{ display: "inline-flex", marginBottom: 14 }}><CheckCircle2 size={11} /> พิมพ์ LPN Label สำเร็จ</div><br /></> : <><div className="scan-step" style={{ display: "inline-flex", marginBottom: 14, color: "var(--danger)", background: "rgba(241,91,113,.10)" }}><ShieldAlert size={11} /> ไม่สร้าง LPN / ไม่รับเข้า Stock</div><br /></>}
               <button className="btn secondary" onClick={() => setActive(null)}>เสร็จสิ้น กลับสู่คิวงาน</button>
             </div>
           )}
