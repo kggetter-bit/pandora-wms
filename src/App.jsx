@@ -96,8 +96,8 @@ let ITEMS = [
 ];
 
 let PLANTS = [
-  { id: "BKK1", erpCode: "1120", name: "Plant HQ · คลังกรุงเทพ 1 (บางนา)" },
-  { id: "BKK2", erpCode: "1121", name: "Plant TKS · คลังกรุงเทพ 2 (ลาดกระบัง — Cross-Dock)" },
+  { id: "BKK1", erpCode: "1120", name: "Plant HQ · คลังกรุงเทพ 1 (บางนา)", storageCost: 18.5, profile: "Fast-moving / Fulfillment", receivingStaging: "STAGING-QC" },
+  { id: "BKK2", erpCode: "1121", name: "Plant TKS · คลังกรุงเทพ 2 (ลาดกระบัง — Cross-Dock)", storageCost: 9.2, profile: "Low-cost / Long storage", receivingStaging: "CD-01-A" },
 ];
 let FLOORS = [
   { id: "BKK1-1", plant: "BKK1", name: "ชั้น 1 · Pick Face / Fast-Moving" },
@@ -238,10 +238,10 @@ const DOCK_SLOTS_INIT = [
 ];
 
 const PENDING_PO_INIT = [
-  { po: "PO-256907-118", supplier: "Western Digital (TH)", itemId: "6425019942", expQty: 480, dock: "Dock-3", actualQty: null, remark: "", status: "Pending" },
-  { po: "PO-256907-121", supplier: "ASUSTeK Distribution", itemId: "6425011001", expQty: 210, dock: "Dock-1", actualQty: null, remark: "", status: "Pending" },
-  { po: "PO-256907-126", supplier: "Logitech Regional", itemId: "6425016678", expQty: 960, dock: "Dock-2", actualQty: null, remark: "", status: "Pending" },
-  { po: "PO-256907-129", supplier: "TP-Link Thailand", itemId: "6425012207", expQty: 340, dock: "Dock-3", actualQty: null, remark: "", status: "Pending" },
+  { po: "PO-256907-118", supplier: "Western Digital (TH)", itemId: "6425019942", expQty: 480, dock: "Dock-3", plannedPlant: "BKK1", expectedStorageDays: 75, actualQty: null, remark: "", status: "Pending" },
+  { po: "PO-256907-121", supplier: "ASUSTeK Distribution", itemId: "6425011001", expQty: 210, dock: "Dock-1", plannedPlant: "BKK1", expectedStorageDays: 18, actualQty: null, remark: "", status: "Pending" },
+  { po: "PO-256907-126", supplier: "Logitech Regional", itemId: "6425016678", expQty: 960, dock: "Dock-2", plannedPlant: "BKK1", expectedStorageDays: 42, actualQty: null, remark: "", status: "Pending" },
+  { po: "PO-256907-129", supplier: "TP-Link Thailand", itemId: "6425012207", expQty: 340, dock: "Dock-3", plannedPlant: "BKK2", expectedStorageDays: 65, actualQty: null, remark: "", status: "Pending" },
 ];
 
 const ALLOC_ORDERS_INIT = [
@@ -575,7 +575,7 @@ const getExportRows = (view, ctx) => {
     };
   });
   const orderRows = () => (ctx.platformOrders || []).map((o) => ({ Date: o.date, Order: o.id, Platform: o.platform, Status: o.status, Items: o.items, Cube_CBM: o.cube, Customer: o.customer || "" }));
-  const poRows = () => (ctx.poList || []).map((p) => ({ PO: p.po, Supplier: p.supplier, SYNNEX_ID: p.itemId, Item_Name: itemOf(p.itemId)?.name, Expected_Qty: p.expQty, Actual_Qty: p.actualQty ?? "", Dock: p.dock, Status: p.status, Remark: p.remark }));
+  const poRows = () => (ctx.poList || []).map((p) => ({ PO: p.po, Supplier: p.supplier, Planned_Plant: plantLabelOf(plannedPlantOfPo(p)), Actual_Plant: plantLabelOf(p.actualPlant), Recommended_Plant: plantLabelOf(receivingStorageRecommendation(p, ctx.stock || []).recommended.plantId), Expected_Storage_Days: p.expectedStorageDays || "", SYNNEX_ID: p.itemId, Item_Name: itemOf(p.itemId)?.name, Expected_Qty: p.expQty, Actual_Qty: p.actualQty ?? "", Dock: p.dock, Status: p.status, Remark: p.remark }));
   const pickRows = () => (ctx.pickTasks || []).map((t) => ({ Pick_Task: t.id, Order: t.order, SYNNEX_ID: t.itemId, Item_Name: itemOf(t.itemId)?.name, Qty: t.qty, Location: t.loc, Strategy: t.strategy, Status: t.status, Assignee: t.assignee }));
   const txRows = () => (ctx.txLog || []).map((t) => {
     const synnexId = t.synnexId || t.itemId || "";
@@ -682,6 +682,57 @@ const sizeGroupOf = (item) => {
 const sizeTextOf = (item) => {
   const [longSide, midSide, shortSide] = sortedDims(item?.dim);
   return `${longSide}x${midSide}x${shortSide} cm / ${item?.dim?.wt || 0} kg`;
+};
+const plantStorageStats = (plantId, stock = []) => {
+  const locs = LOCATIONS.filter((l) => l.plant === plantId);
+  const capacity = locs.reduce((a, l) => a + (Number(l.capacity) || 0), 0);
+  const used = stock
+    .filter((r) => locOf(r.loc)?.plant === plantId)
+    .reduce((a, r) => a + (Number(r.qty) || 0), 0);
+  const free = Math.max(0, capacity - used);
+  return { capacity, used, free, usedPct: capacity ? Math.round((used / capacity) * 100) : 0, freePct: capacity ? Math.round((free / capacity) * 100) : 0 };
+};
+const plantStagingLoc = (plantId, status = "QC") => {
+  const plant = plantOf(plantId);
+  if (status === "QC" && plant?.receivingStaging) return plant.receivingStaging;
+  return LOCATIONS.find((l) => l.plant === plantId && l.type === "Staging")?.code || plant?.receivingStaging || "STAGING-QC";
+};
+const plannedPlantOfPo = (po) => po?.plannedPlant || (po?.dock === "Dock-2" ? "BKK2" : "BKK1");
+const workerPlantOf = (userSession) => userSession?.plant || (userSession?.role === "Receiving TKS" ? "BKK2" : "BKK1");
+const receivingStorageRecommendation = (po, stock = []) => {
+  const lines = poLinesOf(po);
+  const qty = poExpectedQty(po);
+  const items = lines.map((l) => itemOf(l.itemId)).filter(Boolean);
+  const daily = Math.max(1, items.reduce((a, item, idx) => a + (Number(item.dailySales) || 1) * (Number(lines[idx]?.expQty) || 1), 0) / Math.max(1, qty));
+  const expectedDays = Number(po?.expectedStorageDays) || Math.round(qty / daily);
+  const sizeCodes = items.map((item) => sizeGroupOf(item).code);
+  const largestRank = Math.max(...sizeCodes.map((s) => ({ S: 1, M: 2, L: 3, XL: 4 }[s] || 2)), 2);
+  const isFast = daily >= 35 || items.some((item) => item.abc === "A");
+  const isLongStay = expectedDays >= 60;
+  const maxCost = Math.max(...PLANTS.map((p) => Number(p.storageCost) || 0), 1);
+  const candidates = PLANTS.map((plant) => {
+    const stats = plantStorageStats(plant.id, stock);
+    let score = 40 + stats.freePct * 0.35 + ((maxCost - Number(plant.storageCost || 0)) / maxCost) * 25;
+    if (plant.id === "BKK1" && isFast && !isLongStay) score += 24;
+    if (plant.id === "BKK2" && (isLongStay || largestRank >= 3)) score += 28;
+    if (stats.freePct < 15) score -= 30;
+    if (plant.id === plannedPlantOfPo(po)) score += 4;
+    const reasons = [
+      `Free ${stats.freePct}% (${stats.free.toLocaleString()} unit capacity)`,
+      `ค่าเก็บ ${Number(plant.storageCost || 0).toFixed(1)} / unit-day`,
+      isLongStay ? `คาดเก็บ ${expectedDays} วัน เหมาะกับคลังต้นทุนต่ำ` : `คาดเก็บ ${expectedDays} วัน`,
+      isFast ? `สินค้า velocity สูง / ABC A ควรใกล้จุดจ่าย` : `สินค้าไม่เร่งจ่าย เหมาะกับพื้นที่สำรอง`,
+      largestRank >= 3 ? `สินค้า Size ${sizeCodes.join(", ")} กินพื้นที่ ต้องกัน HQ` : `สินค้า Size ${sizeCodes.join(", ")}`,
+    ];
+    return { plantId: plant.id, plant, stats, score: Math.round(score), reasons };
+  }).sort((a, b) => b.score - a.score);
+  return {
+    recommended: candidates[0],
+    candidates,
+    expectedDays,
+    sizeCodes: [...new Set(sizeCodes)],
+    velocity: Math.round(daily),
+  };
 };
 
 function Stars({ n }) {
@@ -2510,7 +2561,7 @@ function AppointmentScheduling({ dockSlots, setDockSlots, poList, setPoList, add
 /* RECEIVING                                                            */
 /* ================================================================== */
 
-function Receiving({ dockSlots, setDockSlots, poList, setPoList, setStock, addTx, serialUnits, setSerialUnits, notify = () => {} }) {
+function Receiving({ dockSlots, setDockSlots, poList, setPoList, stock = [], setStock, addTx, serialUnits, setSerialUnits, notify = () => {}, userSession }) {
   const [tab, setTab] = useState("dock");
   const [booking, setBooking] = useState(false);
   const [form, setForm] = useState({ supplier: "", time: "", dock: "Dock-1", plate: "" });
@@ -2548,10 +2599,12 @@ function Receiving({ dockSlots, setDockSlots, poList, setPoList, setStock, addTx
     <>
       <div className="tabs">
         <span className={`tab ${tab === "dock" ? "active" : ""}`} onClick={() => setTab("dock")}>นัดหมายรถขนส่ง</span>
+        <span className={`tab ${tab === "recommend" ? "active" : ""}`} onClick={() => setTab("recommend")}><Warehouse size={13} style={{ marginRight: 4 }} />แนะนำที่จัดเก็บ</span>
         <span className={`tab ${tab === "track" ? "active" : ""}`} onClick={() => setTab("track")}><ClipboardList size={13} style={{ marginRight: 4 }} />ติดตามสถานะ</span>
         <span className={`tab ${tab === "hh" ? "active" : ""}`} onClick={() => setTab("hh")}>รับสินค้าด้วย Handheld</span>
         <span className={`tab ${tab === "sum" ? "active" : ""}`} onClick={() => setTab("sum")}>สรุปการรับสินค้าวันนี้</span>
       </div>
+      {tab === "recommend" && <ReceivingStorageAdvisor poList={poList} stock={stock} addTx={addTx} notify={notify} />}
 
       {tab === "dock" && (
         <>
@@ -2637,13 +2690,90 @@ function Receiving({ dockSlots, setDockSlots, poList, setPoList, setStock, addTx
           })}
         </>
       )}
-      {tab === "hh" && <HandheldReceiving poList={poList} setPoList={setPoList} setStock={setStock} addTx={addTx} serialUnits={serialUnits} setSerialUnits={setSerialUnits} notify={notify} />}
+      {tab === "hh" && <HandheldReceiving poList={poList} setPoList={setPoList} stock={stock} setStock={setStock} addTx={addTx} serialUnits={serialUnits} setSerialUnits={setSerialUnits} notify={notify} userSession={userSession} />}
       {tab === "sum" && <ReceivingSummary poList={poList} serialUnits={serialUnits} />}
     </>
   );
 }
 
-function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, setSerialUnits, notify = () => {} }) {
+function ReceivingStorageAdvisor({ poList = [], stock = [], addTx = () => {}, notify = () => {} }) {
+  const pending = poList.filter((p) => p.status === "Pending");
+  return (
+    <>
+      <div className="ai-box storage-advisor-head">
+        <div className="row">
+          <BrainCircuit size={22} color="var(--teal)" />
+          <div>
+            <div style={{ fontWeight: 800 }}>Warehouse Storage Recommendation</div>
+            <div className="kpi-sub">ระบบแนะนำคลังจากค่าเก็บ, พื้นที่ว่าง, Size, อายุ/ระยะเวลาฝากเก็บ, ABC และ Velocity ของสินค้า</div>
+          </div>
+        </div>
+      </div>
+      <div className="grid g2">
+        {pending.map((po) => {
+          const rec = receivingStorageRecommendation(po, stock);
+          const planned = plannedPlantOfPo(po);
+          const best = rec.recommended;
+          const mismatch = best.plantId !== planned;
+          return (
+            <div className={`card storage-advisor-card ${mismatch ? "recommend-change" : ""}`} key={po.po}>
+              <div className="storage-advisor-top">
+                <div>
+                  <div className="mono" style={{ color: "var(--amber)", fontWeight: 800 }}>{po.po}</div>
+                  <div style={{ fontWeight: 700 }}>{po.supplier}</div>
+                  <div className="kpi-sub">{poLinesOf(po).length} รายการ · {poExpectedQty(po).toLocaleString()} หน่วย · Velocity {rec.velocity}/วัน · Expected Storage {rec.expectedDays} วัน</div>
+                </div>
+                <span className={`order-status ${mismatch ? "warning" : "success"}`}>{mismatch ? "ควรเปลี่ยน Plant" : "เหมาะสมแล้ว"}</span>
+              </div>
+              <div className="storage-plant-compare">
+                <div className="mini-stat">
+                  <div className="lbl">Planned Plant</div>
+                  <div className="val">{plantLabelOf(planned)}</div>
+                </div>
+                <div className="mini-stat">
+                  <div className="lbl">Recommended Plant</div>
+                  <div className="val">{plantLabelOf(best.plantId)}</div>
+                </div>
+              </div>
+              <div className="recommend-score">
+                <Gauge size={16} />
+                <span>Score {best.score}/100</span>
+                <b>{best.plant.profile}</b>
+              </div>
+              <div className="reason" style={{ marginTop: 10 }}>
+                {best.reasons.map((r) => <div key={r}>• {r}</div>)}
+              </div>
+              <div className="table-wrap compact-table" style={{ marginTop: 12 }}>
+                <table>
+                  <thead><tr><th>Plant</th><th>Cost</th><th>Free</th><th>Used</th><th>Score</th></tr></thead>
+                  <tbody>
+                    {rec.candidates.map((c) => (
+                      <tr key={c.plantId}>
+                        <td>{plantLabelOf(c.plantId)}</td>
+                        <td>{Number(c.plant.storageCost || 0).toFixed(1)}</td>
+                        <td>{c.stats.freePct}%</td>
+                        <td>{c.stats.usedPct}%</td>
+                        <td><b>{c.score}</b></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <button className="btn secondary" style={{ marginTop: 12 }} onClick={() => {
+                addTx({ type: "Storage Recommendation", detail: `${po.po}: แนะนำ ${plantLabelOf(best.plantId)} แทน Planned ${plantLabelOf(planned)} · Score ${best.score} · ${best.reasons.join(" / ")}`, itemId: poLinesOf(po)[0]?.itemId, loc: plantStagingLoc(best.plantId) });
+                notify("บันทึกคำแนะนำคลังแล้ว", `${po.po}: Recommended ${plantLabelOf(best.plantId)}`, mismatch ? "info" : "success");
+              }}>
+                <Save size={13} /> บันทึกคำแนะนำ
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
+function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, serialUnits, setSerialUnits, notify = () => {}, userSession }) {
   const [active, setActive] = useState(null);
   const [lineIdx, setLineIdx] = useState(0);
   const [qty, setQty] = useState("");
@@ -2653,23 +2783,29 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
   const [requireSerial, setRequireSerial] = useState(true);
   const [receiveDate, setReceiveDate] = useState("2569-07-23");
   const [mfgDate, setMfgDate] = useState("2569-06-01");
+  const [actualPlant, setActualPlant] = useState(workerPlantOf(userSession));
+  const [plantDecision, setPlantDecision] = useState("");
   const [printed, setPrinted] = useState(false);
   const activeLine = active ? poLinesOf(active)[lineIdx] : null;
   const activeItem = itemOf(activeLine?.itemId || active?.itemId);
   const ageCheck = active ? receivingAgeCheck(activeItem, mfgDate, receiveDate) : { ok: true, ageDays: 0, rule: receivingAgeRuleOf(activeItem), message: "" };
+  const plannedPlant = active ? plannedPlantOfPo(active) : workerPlantOf(userSession);
+  const activeRecommendation = active ? receivingStorageRecommendation(active, stock) : null;
+  const plantMismatch = Boolean(active && actualPlant !== plannedPlant);
+  const plantDecisionReady = !plantMismatch || Boolean(plantDecision);
   const openPo = (po) => {
     const first = poLinesOf(po)[0];
     setActive(po); setLineIdx(0); setQty(String(first?.expQty || po.expQty)); setRemark("ครบถ้วน");
-    setTrackingLevel(first?.trackingLevel || "Piece"); setRequireSerial(first?.needSn || first?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPrinted(false);
+    setTrackingLevel(first?.trackingLevel || "Piece"); setRequireSerial(first?.needSn || first?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setActualPlant(workerPlantOf(userSession)); setPlantDecision(""); setPrinted(false);
   };
   const switchLine = (idx) => {
     const line = poLinesOf(active)[idx];
-    setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPrinted(false);
+    setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPlantDecision(""); setPrinted(false);
   };
 
   const parseScans = (actual, itemId, lpn) => {
     if (!requireSerial) {
-      return [{ unitId: `UNIT-${rand(100000, 999999)}`, po: active.po, itemId, level: trackingLevel, lpn, sn: "", imei: "", qty: actual, loc: "RECV-DOCK", status: "Received" }];
+      return [{ unitId: `UNIT-${rand(100000, 999999)}`, po: active.po, itemId, level: trackingLevel, lpn, sn: "", imei: "", qty: actual, loc: plantStagingLoc(actualPlant), status: "Received" }];
     }
     const rows = scanText.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
     if (!rows.length) {
@@ -2686,13 +2822,17 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
         sn: snRaw || `SN-${active.po}-${idx + 1}`,
         imei: imeiRaw || "",
         qty: Number(qtyRaw) || (trackingLevel === "Piece" ? 1 : actual),
-        loc: "RECV-DOCK",
+        loc: plantStagingLoc(actualPlant),
         status: "Received",
       };
     });
   };
 
   const confirm = () => {
+    if (!plantDecisionReady) {
+      notify("Plant ไม่ตรงกับ PO", `PO ระบุ ${plantLabelOf(plannedPlant)} แต่กำลังรับที่ ${plantLabelOf(actualPlant)} กรุณาเลือกวิธีดำเนินการก่อน`, "danger");
+      return;
+    }
     const actual = parseInt(qty || "0", 10);
     const line = activeLine;
     const expected = Number(line?.expQty || active.expQty || 0);
@@ -2700,40 +2840,55 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
     const item = itemOf(itemId);
     const currentAgeCheck = receivingAgeCheck(item, mfgDate, receiveDate);
     const isAgeReject = !currentAgeCheck.ok;
-    const status = isAgeReject ? "ปฏิเสธรับ" : actual >= expected ? "รับครบ" : actual === 0 ? "ปฏิเสธรับ" : "รับไม่ครบ";
-    const finalRemark = isAgeReject ? `Reject อายุสินค้า: ${currentAgeCheck.message}` : remark;
+    const isPlantReject = plantMismatch && plantDecision === "returnPlanned";
+    const status = isAgeReject || isPlantReject ? "ปฏิเสธรับ" : actual >= expected ? "รับครบ" : actual === 0 ? "ปฏิเสธรับ" : "รับไม่ครบ";
+    const plantRemark = plantMismatch
+      ? plantDecision === "acceptActual"
+        ? `Plant Mismatch Approved: Planned ${plantLabelOf(plannedPlant)} → Actual ${plantLabelOf(actualPlant)}`
+        : plantDecision === "requestApproval"
+          ? `Plant Mismatch Pending Approval: Planned ${plantLabelOf(plannedPlant)} → Actual ${plantLabelOf(actualPlant)}`
+          : `Plant Mismatch Reject: ส่งกลับ ${plantLabelOf(plannedPlant)}`
+      : `Plant Match: ${plantLabelOf(actualPlant)}`;
+    const finalRemark = isAgeReject ? `Reject อายุสินค้า: ${currentAgeCheck.message}` : isPlantReject ? plantRemark : `${remark} · ${plantRemark}`;
     setPoList((list) => list.map((p) => {
       if (p.po !== active.po) return p;
-      const lines = poLinesOf(p).map((l, i) => (i === lineIdx ? { ...l, actualQty: isAgeReject ? 0 : actual, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, remark: finalRemark, status, trackingLevel, needSn: requireSerial ? l.needSn : false, needImei: requireSerial ? l.needImei : false } : l));
+      const lines = poLinesOf(p).map((l, i) => (i === lineIdx ? { ...l, actualQty: (isAgeReject || isPlantReject) ? 0 : actual, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", remark: finalRemark, status, trackingLevel, needSn: requireSerial ? l.needSn : false, needImei: requireSerial ? l.needImei : false } : l));
       const allDone = lines.every((l) => l.status && l.status !== "Pending");
       const totalActual = lines.reduce((a, l) => a + (Number(l.actualQty) || 0), 0);
-      return { ...p, lines, actualQty: totalActual, remark: allDone ? "รับครบทุก Line" : "รับบาง Line", status: allDone ? (lines.every((l) => l.status === "รับครบ") ? "รับครบ" : "รับไม่ครบ") : "Pending" };
+      return { ...p, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", lines, actualQty: totalActual, remark: allDone ? "รับครบทุก Line" : "รับบาง Line", status: allDone ? (lines.every((l) => l.status === "รับครบ") ? "รับครบ" : "รับไม่ครบ") : "Pending" };
     }));
+    if (plantMismatch) {
+      addTx({ type: "Receiving Plant Mismatch", detail: `${active.po}: Planned ${plantLabelOf(plannedPlant)} แต่รับจริงที่ ${plantLabelOf(actualPlant)} · Decision: ${plantRemark}`, itemId, lot: `RCV-${active.po}`, fromLoc: plantStagingLoc(plannedPlant), toLoc: plantStagingLoc(actualPlant), loc: plantStagingLoc(actualPlant) });
+    }
     if (isAgeReject) {
       addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ถูก Reject ตอนรับเข้า: ${currentAgeCheck.message} · Receive ${receiveDate} · MFG ${mfgDate}`, itemId, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: "REJECT", loc: "REJECT" });
       notify("Handheld Reject รับสินค้า", `${active.po} · ${item?.name}: ${currentAgeCheck.message}`, "danger");
     }
-    if (!isAgeReject && actual > 0 && remark !== "ปฏิเสธรับ (Reject)") {
+    if (isPlantReject) {
+      addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ไม่รับเข้าที่ ${plantLabelOf(actualPlant)} เพราะ PO ระบุ ${plantLabelOf(plannedPlant)} · ตีสินค้ากลับไปรับให้ถูก Plant`, itemId, lot: `RCV-${active.po}`, fromLoc: plantStagingLoc(actualPlant), toLoc: plantStagingLoc(plannedPlant), loc: "REJECT" });
+      notify("Reject Plant Mismatch", `${active.po}: ตีสินค้ากลับไป ${plantLabelOf(plannedPlant)}`, "danger");
+    }
+    if (!isAgeReject && !isPlantReject && actual > 0 && remark !== "ปฏิเสธรับ (Reject)") {
       const stockStatus = remark === "สินค้าเสียหาย" ? "DMG" : "QC";
       const lpn = `LPN-${rand(20000, 99999)}`;
-      const stagingLoc = stockStatus === "QC" ? "STAGING-QC" : "RECV-DOCK";
-      setStock((list) => [...list, { key: Date.now() + Math.random(), itemId, batch: `RCV-${active.po}`, lpn, loc: stagingLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule }]);
+      const stagingLoc = plantStagingLoc(actualPlant, stockStatus);
+      setStock((list) => [...list, { key: Date.now() + Math.random(), itemId, batch: `RCV-${active.po}`, lpn, loc: stagingLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match" }]);
       setSerialUnits((list) => [...parseScans(actual, itemId, lpn), ...list]);
-      addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} รับจริง ${actual}/${expected} · MFG ${mfgDate} · อายุ ${currentAgeCheck.ageDays} วัน → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
+      addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} รับจริง ${actual}/${expected} · Planned ${plantLabelOf(plannedPlant)} · Actual ${plantLabelOf(actualPlant)} · MFG ${mfgDate} · อายุ ${currentAgeCheck.ageDays} วัน → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
     }
     setPrinted(true);
   };
   const pending = poList.filter((p) => p.status === "Pending");
 
   return (
-    <div className="grid g2" style={{ alignItems: "flex-start" }}>
+    <div className="receiving-handheld-layout">
       <div>
         <div className="section-title" style={{ marginTop: 0 }}>PO รอรับสินค้า</div>
         {pending.length === 0 && <div className="kpi-sub">รับสินค้าครบทุกใบสำหรับวันนี้แล้ว</div>}
         {pending.map((p) => (
           <div className="po-row" key={p.po}>
             <ScanLine size={20} color="var(--teal)" />
-            <div className="po-info"><div className="sup">{p.supplier} <span className="po-id">· {p.po}</span></div><div className="meta">{poLinesOf(p).length} รายการ · คาดรับ {poExpectedQty(p)} หน่วย · {p.dock} · Age Rule {receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).minAgeDays}-{receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).maxAgeDays} วัน</div></div>
+            <div className="po-info"><div className="sup">{p.supplier} <span className="po-id">· {p.po}</span></div><div className="meta">{poLinesOf(p).length} รายการ · คาดรับ {poExpectedQty(p)} หน่วย · Planned {plantLabelOf(plannedPlantOfPo(p))} · AI แนะนำ {plantLabelOf(receivingStorageRecommendation(p, stock).recommended.plantId)} · Age Rule {receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).minAgeDays}-{receivingAgeRuleOf(itemOf(poLinesOf(p)[0]?.itemId || p.itemId)).maxAgeDays} วัน</div></div>
             <button className="btn" onClick={() => openPo(p)}>เปิด Handheld <ArrowRight size={13} /></button>
           </div>
         ))}
@@ -2747,7 +2902,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
         ))}
       </div>
 
-      <div className="handheld">
+      <div className="handheld receiving-handheld-phone">
         <div className="handheld-screen">
           {!active && <div className="kpi-sub" style={{ textAlign: "center", padding: "60px 10px" }}><Smartphone size={28} style={{ marginBottom: 10 }} /><br />เลือก PO ทางซ้ายเพื่อเริ่มสแกนรับสินค้าด้วย Handheld</div>}
           {active && !printed && (
@@ -2757,14 +2912,39 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
                 {poLinesOf(active).map((l, i) => <span key={i} className={`chip ${lineIdx === i ? "active" : ""}`} onClick={() => switchLine(i)}>Line {i + 1}</span>)}
               </div>
               <div className="item-heading"><ItemCell itemId={activeLine?.itemId} /></div>
+              <div className="storage-mini-card">
+                <div className="storage-mini-title"><Warehouse size={14} /> Storage / Plant Control</div>
+                <div className="storage-plant-compare">
+                  <div className="mini-stat"><div className="lbl">Planned Plant จาก PO</div><div className="val">{plantLabelOf(plannedPlant)}</div></div>
+                  <div className="mini-stat"><div className="lbl">AI Recommended</div><div className="val">{plantLabelOf(activeRecommendation?.recommended?.plantId)}</div></div>
+                </div>
+                <div className="field"><label>Actual Plant ที่พนักงานกำลังรับจริง</label><select value={actualPlant} onChange={(e) => { setActualPlant(e.target.value); setPlantDecision(""); }}>{PLANTS.map((p) => <option key={p.id} value={p.id}>{p.erpCode} · {p.name}</option>)}</select></div>
+                {plantMismatch ? (
+                  <div className="allocation-shortage plant-mismatch-alert">
+                    <AlertTriangle size={14} />
+                    <span>PO ระบุ {plantLabelOf(plannedPlant)} แต่กำลังรับที่ {plantLabelOf(actualPlant)} ต้องเลือกว่าจะรับที่ Plant ปัจจุบันหรือส่งกลับ</span>
+                  </div>
+                ) : (
+                  <div className="scan-step done" style={{ display: "inline-flex", marginBottom: 8 }}><ShieldCheck size={11} /> Plant ตรงกับ PO</div>
+                )}
+                {plantMismatch && (
+                  <div className="field">
+                    <label>วิธีดำเนินการเมื่อ Plant ไม่ตรง</label>
+                    <select value={plantDecision} onChange={(e) => setPlantDecision(e.target.value)}>
+                      <option value="">เลือกการตัดสินใจ</option>
+                      <option value="returnPlanned">ไม่รับที่นี่ / ตีสินค้ากลับไปรับที่ Planned Plant</option>
+                      <option value="acceptActual">ยืนยันรับที่ Plant ปัจจุบัน เพื่อให้ Stock จริงตรงระบบ</option>
+                      <option value="requestApproval">รับไว้ที่ Plant ปัจจุบันแบบ Pending Approval</option>
+                    </select>
+                  </div>
+                )}
+              </div>
               <div className="scan-step" style={{ display: "inline-flex", marginBottom: 10, color: "var(--amber)", background: "rgba(62,126,224,.12)" }}><ShieldAlert size={11} /> ตรวจอายุรับเข้า: รับได้ {ageCheck.rule.minAgeDays}-{ageCheck.rule.maxAgeDays} วัน นับจากวันผลิตถึงวันที่รับเข้า</div>
               <div className="field"><label>PO Number</label><input value={active.po} disabled /></div>
               <div className="field"><label>จำนวนที่คาดรับ</label><input value={activeLine?.expQty || 0} disabled /></div>
               <div className="field"><label>จำนวนที่รับจริง</label><input type="number" value={qty} onChange={(e) => setQty(e.target.value)} /></div>
-              <div className="grid g2">
-                <div className="field"><label>วันที่รับเข้า</label><input value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} placeholder="2569-07-23" /></div>
-                <div className="field"><label>วันผลิตสินค้า (MFG Date)</label><input value={mfgDate} onChange={(e) => setMfgDate(e.target.value)} placeholder="2569-06-01" /></div>
-              </div>
+              <div className="field"><label>วันที่รับเข้า</label><input value={receiveDate} onChange={(e) => setReceiveDate(e.target.value)} placeholder="2569-07-23" /></div>
+              <div className="field"><label>วันผลิตสินค้า (MFG Date)</label><input value={mfgDate} onChange={(e) => setMfgDate(e.target.value)} placeholder="2569-06-01" /></div>
               <div className={`allocation-shortage`} style={{ color: ageCheck.ok ? "var(--success)" : "var(--danger)", background: ageCheck.ok ? "rgba(32,199,102,.10)" : "rgba(241,91,113,.12)", borderColor: ageCheck.ok ? "rgba(32,199,102,.25)" : "rgba(241,91,113,.35)" }}>
                 {ageCheck.ok ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />}
                 <span>{ageCheck.message} · Rule: {ageCheck.rule.minAgeDays}-{ageCheck.rule.maxAgeDays} วัน</span>
@@ -2777,7 +2957,7 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
                   <option>ครบถ้วน</option><option>ขาดจำนวน</option><option>สินค้าเกิน</option><option>สินค้าเสียหาย</option><option>ปฏิเสธรับ (Reject)</option>
                 </select>
               </div>
-              <button className="btn" style={{ width: "100%", justifyContent: "center", background: ageCheck.ok ? undefined : "var(--danger)", color: ageCheck.ok ? undefined : "#FFFFFF" }} onClick={confirm}>{ageCheck.ok ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />} {ageCheck.ok ? "ยืนยันรับสินค้า" : "Reject รับสินค้า"}</button>
+              <button className="btn" style={{ width: "100%", justifyContent: "center", background: ageCheck.ok && plantDecisionReady ? undefined : "var(--danger)", color: ageCheck.ok && plantDecisionReady ? undefined : "#FFFFFF" }} onClick={confirm}>{ageCheck.ok && plantDecisionReady ? <CheckCircle2 size={13} /> : <ShieldAlert size={13} />} {ageCheck.ok && plantDecisionReady ? "ยืนยันรับสินค้า" : "ต้องแก้ Exception ก่อนรับ"}</button>
             </>
           )}
           {active && printed && (
@@ -2785,7 +2965,8 @@ function HandheldReceiving({ poList, setPoList, setStock, addTx, serialUnits, se
               <Printer size={30} color="var(--teal)" style={{ marginBottom: 10 }} />
               <div style={{ fontFamily: "'Space Grotesk'", fontWeight: 700, marginBottom: 6 }}>ใบรับสินค้า (Receiving Slip)</div>
               <div className="kpi-sub">{active.po} · Line {lineIdx + 1} · {activeLine?.itemId} · {itemOf(activeLine?.itemId)?.name}</div>
-              <div className="kpi-sub" style={{ margin: "8px 0" }}>รับจริง {ageCheck.ok ? qty : 0} / {activeLine?.expQty} หน่วย — {ageCheck.ok ? remark : `Reject: ${ageCheck.message}`}</div>
+              <div className="kpi-sub" style={{ margin: "8px 0" }}>รับจริง {ageCheck.ok && plantDecision !== "returnPlanned" ? qty : 0} / {activeLine?.expQty} หน่วย — {ageCheck.ok ? remark : `Reject: ${ageCheck.message}`}</div>
+              <div className="kpi-sub" style={{ marginBottom: 8 }}>Planned {plantLabelOf(plannedPlant)} · Actual {plantLabelOf(actualPlant)} · {plantMismatch ? `Decision ${plantDecision || "-"}` : "Plant Match"}</div>
               <div className={`scan-step ${ageCheck.ok ? "done" : ""}`} style={{ display: "inline-flex", marginBottom: 8, color: ageCheck.ok ? undefined : "var(--danger)", background: ageCheck.ok ? undefined : "rgba(241,91,113,.10)" }}>{ageCheck.ok ? <ShieldCheck size={11} /> : <ShieldAlert size={11} />} อายุสินค้า {ageCheck.ageDays ?? "-"} วัน · MFG {mfgDate} · รับเข้า {receiveDate}</div><br />
               {ageCheck.ok ? <><div className="scan-step done" style={{ display: "inline-flex", marginBottom: 8 }}><ShieldCheck size={11} /> บันทึก SN/IMEI แล้ว {serialUnits.filter((u) => u.po === active.po).length} record</div><br /><div className="scan-step done" style={{ display: "inline-flex", marginBottom: 14 }}><CheckCircle2 size={11} /> พิมพ์ LPN Label สำเร็จ</div><br /></> : <><div className="scan-step" style={{ display: "inline-flex", marginBottom: 14, color: "var(--danger)", background: "rgba(241,91,113,.10)" }}><ShieldAlert size={11} /> ไม่สร้าง LPN / ไม่รับเข้า Stock</div><br /></>}
               <button className="btn secondary" onClick={() => setActive(null)}>เสร็จสิ้น กลับสู่คิวงาน</button>
@@ -5680,6 +5861,18 @@ function GlobalStyle() {
       .ai-box{background:linear-gradient(135deg,rgba(62,126,224,0.08),rgba(23,169,192,0.08));border:1px solid rgba(62,126,224,0.3);border-radius:12px;padding:18px;margin-bottom:18px;}
       .ai-box .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
       .ai-box .reason{margin-top:10px;font-size:13px;color:var(--text);line-height:1.6;}
+      .storage-advisor-card{position:relative;overflow:hidden;}
+      .storage-advisor-card.recommend-change{border-color:rgba(245,168,60,.45);box-shadow:0 8px 22px rgba(245,168,60,.10);}
+      .storage-advisor-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px;}
+      .storage-plant-compare{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0;}
+      .recommend-score{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);background:rgba(23,169,192,.08);border:1px solid rgba(23,169,192,.22);border-radius:10px;padding:9px 10px;}
+      .recommend-score span{font-family:'Space Grotesk';font-size:18px;font-weight:800;color:var(--teal);}
+      .recommend-score b{margin-left:auto;color:var(--text);font-size:12px;}
+      .storage-mini-card{background:linear-gradient(135deg,rgba(62,126,224,.08),rgba(62,199,117,.08));border:1px solid rgba(62,126,224,.24);border-radius:12px;padding:12px;margin:10px 0 12px;}
+      .storage-mini-title{display:flex;align-items:center;gap:7px;font-weight:800;font-size:12.5px;margin-bottom:8px;}
+      .plant-mismatch-alert{color:var(--danger);background:rgba(241,91,113,.12);border-color:rgba(241,91,113,.35);}
+      .compact-table table th,.compact-table table td{font-size:11px;padding:8px;}
+      @media (max-width:800px){.storage-plant-compare{grid-template-columns:1fr;}}
       .profile-tag{font-size:11.5px;background:rgba(255,255,255,0.06);padding:4px 9px;border-radius:8px;color:var(--muted);}
       .modal-backdrop{--panel:#FFFFFF;--panel-raised:#F3F6FA;--border:#D6DEE8;--text:#1F2937;--muted:#6B7688;--amber:#3E7EE0;--teal:#17A9C0;--danger:#F15B71;--success:#3EC775;position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;z-index:50;}
       .modal{background:var(--panel-raised);border:1px solid var(--border);border-radius:14px;padding:26px;width:90%;max-height:85vh;overflow-y:auto;}
@@ -5719,8 +5912,17 @@ function GlobalStyle() {
       .tag-status.Completed{background:var(--success);}
       .tag-status.Hold{background:var(--danger);}
       .prio{font-size:11.5px;} .prio.vip{color:var(--amber);font-weight:600;} .prio.sla{color:var(--danger);font-weight:600;} .prio.normal{color:var(--muted);}
-      .handheld{max-width:300px;background:#000;border:3px solid #333;border-radius:22px;padding:16px;box-shadow:0 0 0 6px var(--panel-raised), 0 4px 14px rgba(22,35,61,0.24);}
-      .handheld-screen{background:var(--panel);border-radius:10px;padding:16px;min-height:300px;}
+      .handheld{width:460px;max-width:100%;background:#000;border:3px solid #333;border-radius:22px;padding:16px;box-shadow:0 0 0 6px var(--panel-raised), 0 4px 14px rgba(22,35,61,0.24);}
+      .handheld-screen{background:var(--panel);border-radius:10px;padding:18px;min-height:300px;overflow:hidden;}
+      .receiving-handheld-layout{display:grid;grid-template-columns:minmax(460px,1fr) 560px;gap:24px;align-items:flex-start;}
+      .receiving-handheld-phone{width:540px;max-width:540px;}
+      .receiving-handheld-phone .handheld-screen{padding:22px;}
+      .receiving-handheld-phone input,.receiving-handheld-phone select,.receiving-handheld-phone textarea{width:100%;box-sizing:border-box;}
+      .receiving-handheld-phone .scan-step,.receiving-handheld-phone .allocation-shortage{max-width:100%;white-space:normal;line-height:1.35;align-items:flex-start;}
+      .handheld .receiving-date-grid{display:grid!important;grid-template-columns:1fr!important;gap:0!important;}
+      .handheld .scan-step{white-space:normal;line-height:1.35;align-items:flex-start;}
+      .handheld .allocation-shortage{align-items:flex-start;line-height:1.35;}
+      @media (max-width:1100px){.receiving-handheld-layout{grid-template-columns:1fr;}.receiving-handheld-phone{width:100%;max-width:540px;margin:0 auto;}}
       .recall-split{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
       @media (max-width:800px){.recall-split{grid-template-columns:1fr;}}
       .recall-col{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;}
