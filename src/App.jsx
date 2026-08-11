@@ -449,6 +449,9 @@ const NAV_GROUPS = [
       { id: "recallprework", label: "Total Recall Prework", icon: Tags },
       { id: "people", label: "Productivity Dashboard", icon: Users },
       { id: "rodocs", label: "RO / RI Billing", icon: FileText },
+      { id: "optimization", label: "AI Optimization Control", icon: BrainCircuit },
+      { id: "wes", label: "WES Control Tower", icon: Bot },
+      { id: "exceptions", label: "Exception Center", icon: ShieldAlert },
     ]
   },
   {
@@ -602,6 +605,11 @@ const getExportRows = (view, ctx) => {
   const returnRows = () => (ctx.returnTickets || []).map((t) => ({ Ticket: t.id, Date: t.date, SO: t.so || t.order || "", SYNNEX_ID: t.itemId || "", Item_Name: itemOf(t.itemId)?.name || t.item || "", Qty: t.qty, Reason: t.reason, Step: t.step, Decision: t.decision || "", Pickup_Status: t.pickupStatus || "" }));
   const csRows = () => (ctx.csCases || []).map((c) => ({ Case: c.id, Date: c.date, SO: c.so, Customer: c.customer, SYNNEX_ID: c.itemId || "", Item_Name: itemOf(c.itemId)?.name || "", Issue: c.issueType, KPI: c.kpiImpact, Owner: c.faultOwner, Qty: c.qty, Status: c.status, Return_Ticket: c.returnTicketId || "" }));
   const backlogRows = () => getBacklog24h(ctx).map((r) => ({ Stage: r.stage, Owner: r.owner, Backlog: r.count, Within_24h: r.within24, Over_24h: r.over24, Max_Age_Hours: r.ageHours, SLA_Hours: r.slaHours }));
+  const optimizationRows = () => optimizationRowsOf(ctx).map((r) => ({ Priority_Score: r.score, SYNNEX_ID: r.item.id, Item_Name: r.item.name, Brand: r.item.brand, Size: r.size, Stock_Qty: r.qty, Cover_Days: r.coverDays, Inbound_Qty: r.inboundQty, Order_Demand: r.orderedQty, Current_Location: r.currentLocs.join(", "), Storage_System: r.currentSystems.join(", "), Sticker_Block: r.stickerBlock ? "Y" : "N", AI_Recommendation: r.recommendation }));
+  const exceptionRows = () => [
+    ...((ctx.allocOrders || []).flatMap((o) => (o.items || o.lines || []).map((l) => ({ Order_ID: o.id, SYNNEX_ID: l.itemId, Item_Name: itemOf(l.itemId)?.name || "", Order_Qty: Number(l.qty || l.orderQty || 0), Available_Qty: stockQtyOf(ctx.stock || [], l.itemId), Exception_Type: stockQtyOf(ctx.stock || [], l.itemId) < Number(l.qty || l.orderQty || 0) ? "Inventory Not Enough" : "" })).filter((r) => r.Exception_Type))),
+    ...((ctx.stock || []).filter((r) => stickerStateOfStock(r).required && !stickerStateOfStock(r).ok).map((r) => ({ Order_ID: "", SYNNEX_ID: r.itemId, Item_Name: itemOf(r.itemId)?.name || "", Order_Qty: "", Available_Qty: r.qty, Exception_Type: "Sticker Not Ready", LPN: r.lpn, Location: r.loc }))),
+  ];
   const summaryRows = () => [
     ...backlogRows(),
     { Stage: "Total Stock", Owner: "Inventory", Backlog: (ctx.stock || []).reduce((a, r) => a + r.qty, 0), Within_24h: "", Over_24h: "", Max_Age_Hours: "", SLA_Hours: "" },
@@ -616,6 +624,7 @@ const getExportRows = (view, ctx) => {
     packing: () => [...stockRows().filter((r) => ["PICKED", "PACKED"].includes(r.Status_Code)), ...pickRows()],
     prework: () => ctx.stickerTasks || [], returns: returnRows, cs: csRows, warehouse3d: stockRows, invhold: stockRows, aging: stockRows, cover: stockRows,
     recall: stockRows, people: () => ctx.users || [], integrations: summaryRows, dispatch: orderRows, ai: () => ctx.aiLog || [],
+    optimization: optimizationRows, wes: () => ctx.robotJobs || [], exceptions: exceptionRows,
     master: () => ITEMS.map((i) => ({ SYNNEX_ID: i.id, Item_Code: i.itemCode, Name: i.name, Brand: i.brand, Size: i.sizeClass, Pack_Key: i.packKey })),
   };
   return (map[view] || summaryRows)();
@@ -907,6 +916,7 @@ export default function App() {
   const [popup, setPopup] = useState(null);
   const [view, setView] = useState("overview");
   const [mode, setMode] = useState("general");
+  const [freeLayoutMode, setFreeLayoutMode] = useState(false);
   const [now, setNow] = useState(new Date());
   const [pipeline, setPipeline] = useState([42, 118, 96, 74, 61]);
   const [kpi, setKpi] = useState({ accuracy: 89.0, caseRate: 0.0545, throughput: 61200, cycle: 5.4, otif: 88.4 });
@@ -1080,6 +1090,7 @@ export default function App() {
             <div className="ai-pill">{userSession?.role || "User"}</div>
             <div className="ai-pill"><span className="dot" /> AI Engine Active</div>
             <div className="clock">{now.toLocaleTimeString("th-TH")}</div>
+            <button className={`btn secondary layout-toggle ${freeLayoutMode ? "active" : ""}`} onClick={() => setFreeLayoutMode((v) => !v)}><MoveRight size={13} /> จัด Layout</button>
             <button className="btn secondary export-btn" onClick={handleExportExcel}><FileText size={13} /> Excel</button>
             <button className="btn secondary export-btn" onClick={handleExportPdf}><Printer size={13} /> PDF</button>
             <button className="btn secondary" onClick={() => { setLoggedIn(false); notify("Logout สำเร็จ", "ออกจากระบบแล้ว", "success"); }}>Logout</button>
@@ -1118,10 +1129,14 @@ export default function App() {
             {view === "recallprework" && <TotalRecallPrework stickerTasks={stickerTasks} stickerStock={stickerStock} />}
             {view === "people" && <Productivity {...ctx} />}
             {view === "rodocs" && <RoRiBilling returnTickets={returnTickets} platformOrders={platformOrders} allocOrders={allocOrders} />}
+            {view === "optimization" && <OptimizationControl {...ctx} />}
+            {view === "wes" && <WesControlTower {...ctx} />}
+            {view === "exceptions" && <ExceptionCenter {...ctx} />}
             {view === "integrations" && <Integrations />}
             {view === "dispatch" && <DispatchPlanning {...ctx} />}
             {view === "ai" && <AILog log={aiLog} />}
           </ViewErrorBoundary>
+          <FreeLayoutController view={view} enabled={freeLayoutMode} />
         </div>
       </div>
       <AppPopup popup={popup} onCancel={closePopup} onConfirm={runPopupConfirm} />
@@ -1143,6 +1158,160 @@ function LpCard({ icon: Icon, label, value, sub, variant = "info", progress, ton
         {sub && <div className="lp-sub">{sub}</div>}
         {progress != null && <div className="lp-progress-track"><div className="lp-progress-fill" style={{ width: `${Math.min(100, progress)}%`, background: variant === "bad" ? "var(--danger)" : variant === "plan" ? "var(--tone)" : variant === "good" ? "var(--success)" : "var(--amber)" }} /></div>}
       </div>
+    </div>
+  );
+}
+
+function FreeLayoutController({ view, enabled }) {
+  useEffect(() => {
+    const content = document.querySelector(".content");
+    if (!content) return undefined;
+    const selector = [
+      ".exec-panel",
+      ".exec-backlog-panel",
+      ".lp-panel",
+      ".table-wrap",
+      ".card",
+      ".sales-matrix-panel",
+      ".productivity-dashboard-panel",
+    ].join(",");
+    const storageKey = `wms-free-layout-${view}`;
+    const readLayout = () => {
+      try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; }
+    };
+    const writeLayout = (layout) => {
+      try { localStorage.setItem(storageKey, JSON.stringify(layout)); } catch { /* ignore browser storage policy */ }
+    };
+    const makeId = (el, idx) => {
+      const title = el.querySelector("h3,.exec-panel-title,.section-title,.lp-label")?.textContent?.trim() || el.className || "widget";
+      return `${idx}-${title.replace(/\s+/g, "-").slice(0, 44)}`;
+    };
+    const cleanupFns = [];
+    const targets = Array.from(content.querySelectorAll(selector))
+      .filter((el) => !el.closest(".modal") && !el.closest(".sidebar") && el.offsetParent !== null)
+      .slice(0, 80);
+
+    content.classList.toggle("free-layout-enabled", enabled);
+    targets.forEach((el, idx) => {
+      const widgetId = el.dataset.freeWidgetId || makeId(el, idx);
+      el.dataset.freeWidgetId = widgetId;
+      const layout = readLayout();
+      const saved = layout[widgetId];
+      el.classList.toggle("free-widget", enabled);
+      if (saved) {
+        el.style.transform = `translate(${saved.x || 0}px, ${saved.y || 0}px)`;
+        if (saved.w) el.style.width = `${saved.w}px`;
+        if (saved.h) el.style.height = `${saved.h}px`;
+      }
+      if (!enabled) {
+        el.querySelectorAll(":scope > .free-drag-handle,:scope > .free-resize-handle").forEach((h) => h.remove());
+        return;
+      }
+
+      const computed = window.getComputedStyle(el);
+      if (computed.position === "static") el.style.position = "relative";
+      el.style.zIndex = el.style.zIndex || "1";
+
+      const handle = document.createElement("div");
+      handle.className = "free-drag-handle";
+      handle.innerHTML = `<span>ลากย้าย</span><button type="button" title="Reset widget">Reset</button>`;
+      const resizer = document.createElement("div");
+      resizer.className = "free-resize-handle";
+      el.appendChild(handle);
+      el.appendChild(resizer);
+
+      const save = (patch) => {
+        const current = readLayout();
+        const rect = el.getBoundingClientRect();
+        const previous = current[widgetId] || {};
+        current[widgetId] = { x: previous.x || 0, y: previous.y || 0, w: Math.round(rect.width), h: Math.round(rect.height), ...patch };
+        writeLayout(current);
+      };
+      const reset = (event) => {
+        event.stopPropagation();
+        event.preventDefault();
+        const current = readLayout();
+        delete current[widgetId];
+        writeLayout(current);
+        el.style.transform = "";
+        el.style.width = "";
+        el.style.height = "";
+      };
+      const startDrag = (event) => {
+        if (event.target.tagName === "BUTTON") return;
+        event.preventDefault();
+        const current = readLayout()[widgetId] || {};
+        const start = { x: event.clientX, y: event.clientY, tx: Number(current.x || 0), ty: Number(current.y || 0) };
+        el.style.zIndex = "20";
+        const move = (e) => {
+          const x = Math.round(start.tx + e.clientX - start.x);
+          const y = Math.round(start.ty + e.clientY - start.y);
+          el.style.transform = `translate(${x}px, ${y}px)`;
+          save({ x, y });
+        };
+        const up = () => {
+          el.style.zIndex = "1";
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      };
+      const startResize = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = el.getBoundingClientRect();
+        const start = { x: event.clientX, y: event.clientY, w: rect.width, h: rect.height };
+        el.style.zIndex = "20";
+        const move = (e) => {
+          const w = Math.max(260, Math.round(start.w + e.clientX - start.x));
+          const h = Math.max(140, Math.round(start.h + e.clientY - start.y));
+          el.style.width = `${w}px`;
+          el.style.height = `${h}px`;
+          save({ w, h });
+        };
+        const up = () => {
+          el.style.zIndex = "1";
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+      };
+
+      handle.addEventListener("pointerdown", startDrag);
+      handle.querySelector("button")?.addEventListener("click", reset);
+      resizer.addEventListener("pointerdown", startResize);
+      cleanupFns.push(() => {
+        handle.removeEventListener("pointerdown", startDrag);
+        handle.querySelector("button")?.removeEventListener("click", reset);
+        resizer.removeEventListener("pointerdown", startResize);
+        handle.remove();
+        resizer.remove();
+        el.classList.remove("free-widget");
+      });
+    });
+
+    return () => {
+      cleanupFns.forEach((fn) => fn());
+      content.classList.remove("free-layout-enabled");
+    };
+  }, [view, enabled]);
+
+  if (!enabled) return null;
+  const resetPage = () => {
+    try { localStorage.removeItem(`wms-free-layout-${view}`); } catch { /* ignore */ }
+    document.querySelectorAll(".content .free-widget").forEach((el) => {
+      el.style.transform = "";
+      el.style.width = "";
+      el.style.height = "";
+    });
+  };
+  return (
+    <div className="free-layout-toolbar">
+      <MoveRight size={14} />
+      <span>Layout Edit Mode: ลากหัวกล่องเพื่อย้าย · ดึงมุมขวาล่างเพื่อปรับขนาด</span>
+      <button type="button" onClick={resetPage}>Reset หน้านี้</button>
     </div>
   );
 }
@@ -5560,6 +5729,196 @@ function Productivity({ users, setUsers }) {
 }
 
 /* ================================================================== */
+/* AI OPTIMIZATION + WES + EXCEPTION CENTER                            */
+/* ================================================================== */
+
+const stockQtyOf = (stock, itemId) => stock.filter((r) => r.itemId === itemId && !["DMG", "HOLD"].includes(r.status)).reduce((a, r) => a + Number(r.qty || 0), 0);
+const openOrderQtyOf = (orders = [], itemId) => orders.flatMap((o) => o.items || o.lines || []).filter((l) => l.itemId === itemId).reduce((a, l) => a + Number(l.qty || l.orderQty || 0), 0);
+
+const optimizationRowsOf = ({ stock = [], poList = [], allocOrders = [] }) => ITEMS.map((item) => {
+  const qty = stockQtyOf(stock, item.id);
+  const coverDays = Math.round(qty / Math.max(1, Number(item.dailySales || 1)));
+  const currentLocs = [...new Set(stock.filter((r) => r.itemId === item.id).map((r) => r.loc))];
+  const currentSystems = [...new Set(currentLocs.map((loc) => locOf(loc)?.system).filter(Boolean))];
+  const inboundQty = poList.flatMap((p) => poLinesOf(p).map((l) => ({ ...l, po: p }))).filter((l) => l.itemId === item.id && l.po.status !== "Completed").reduce((a, l) => a + Number(l.expQty || l.qty || 0), 0);
+  const orderedQty = openOrderQtyOf(allocOrders, item.id);
+  const size = sizeGroupOf(item).code;
+  const fast = Number(item.dailySales || 0) >= 50 || item.abc === "A";
+  const shortageRisk = coverDays < 14 || orderedQty > qty;
+  const stickerBlock = item.stickerRequired && stock.some((r) => r.itemId === item.id && stickerStateOfStock(r).code !== "DONE");
+  let recommendation = fast ? "ย้ายเข้า Pick Face / Miniload ใกล้ Pack Station" : "เก็บ Bulk / Low-cost Plant เพื่อลดค่าเช่า";
+  if (shortageRisk) recommendation = "เร่ง Replenishment + กัน Stock สำหรับ Order ด่วน";
+  if (size === "L" || size === "XL") recommendation = "กันพื้นที่ HQ และแนะนำเก็บ Plant ต้นทุนต่ำถ้าไม่เร่งขาย";
+  const score = Math.min(99, Math.max(40, 52 + (fast ? 16 : 0) + (shortageRisk ? 18 : 0) + (stickerBlock ? 8 : 0) + (inboundQty ? 5 : 0)));
+  return { item, qty, coverDays, currentLocs, currentSystems, inboundQty, orderedQty, size, fast, shortageRisk, stickerBlock, recommendation, score };
+}).sort((a, b) => b.score - a.score);
+
+function OptimizationControl({ stock = [], poList = [], allocOrders = [], addTx = () => {}, notify = () => {} }) {
+  const rows = optimizationRowsOf({ stock, poList, allocOrders });
+  const plantRows = PLANTS.map((plant) => ({ plant, ...plantStorageStats(plant.id, stock) }));
+  const highPriority = rows.filter((r) => r.score >= 80).length;
+  const costSaving = plantRows.reduce((a, r) => a + Math.max(0, r.used * (18.5 - Number(r.plant.storageCost || 0))), 0);
+  const approve = (row) => {
+    addTx({ type: "AI Slotting Recommendation", detail: `${row.item.id}: ${row.recommendation} · Score ${row.score}`, itemId: row.item.id, loc: row.currentLocs[0] || "" });
+    notify("บันทึกคำแนะนำ AI แล้ว", `${row.item.name} · ${row.recommendation}`, "success");
+  };
+  return (
+    <>
+      <div className="section-title">AI Optimization Control — Storage / Slotting / Cost Intelligence</div>
+      <div className="grid g4" style={{ marginBottom: 14 }}>
+        <LpCard icon={BrainCircuit} label="AI Actions" value={rows.length} sub="รายการที่ระบบวิเคราะห์" variant="info" progress={86} />
+        <LpCard icon={AlertTriangle} label="High Priority" value={highPriority} sub="ต้องตัดสินใจก่อน" variant={highPriority ? "bad" : "good"} progress={highPriority * 12} />
+        <LpCard icon={Warehouse} label="Plant Options" value={PLANTS.length} sub="คลังที่ใช้คำนวณต้นทุน" variant="plan" />
+        <LpCard icon={Gauge} label="Cost Avoidance" value={Math.round(costSaving).toLocaleString()} sub="หน่วยต้นทุนจำลอง / วัน" variant="good" />
+      </div>
+      <div className="grid g2" style={{ marginBottom: 14 }}>
+        {plantRows.map((r) => (
+          <div className="lp-panel optimizer-plant" key={r.plant.id}>
+            <h3>{r.plant.erpCode} · {r.plant.name}</h3>
+            <div className="kpi-sub">{r.plant.profile} · ค่าเก็บ {r.plant.storageCost}/unit-day</div>
+            <div className="util-line"><i style={{ width: `${Math.min(100, r.usedPct)}%` }} /></div>
+            <div className="recall-row"><span>Used / Capacity</span><span className="mono">{r.used.toLocaleString()} / {r.capacity.toLocaleString()}</span></div>
+            <div className="recall-row"><span>Free Space</span><span className="mono">{r.freePct}%</span></div>
+          </div>
+        ))}
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Priority</th><th>SYNNEX ID</th><th>Item Name</th><th>Size</th><th>Stock</th><th>Cover</th><th>Inbound</th><th>Order Demand</th><th>Current Location</th><th>AI Recommendation</th><th>Action</th></tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.item.id}>
+                <td><span className={`priority-pill ${r.score >= 80 ? "red" : r.score >= 68 ? "yellow" : "blue"}`}>{r.score}</span></td>
+                <td className="mono">{r.item.id}</td>
+                <td>{r.item.name}<div className="kpi-sub">{r.item.brand} · {r.currentSystems.join(", ") || "-"}</div></td>
+                <td><span className="size-chip" style={{ background: sizeGroupOf(r.item).color }}>{r.size}</span></td>
+                <td className="mono">{r.qty.toLocaleString()}</td>
+                <td className={`mono ${r.coverDays < 14 ? "txt-danger" : ""}`}>{r.coverDays} วัน</td>
+                <td className="mono">{r.inboundQty.toLocaleString()}</td>
+                <td className="mono">{r.orderedQty.toLocaleString()}</td>
+                <td>{r.currentLocs.join(", ") || "-"}</td>
+                <td>{r.recommendation}{r.stickerBlock && <div className="kpi-sub txt-danger">ยังมี LPN ที่ต้องติด Sticker ก่อนขาย</div>}</td>
+                <td><button className="btn secondary" onClick={() => approve(r)}><CheckCircle2 size={13} /> ใช้คำแนะนำ</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function WesControlTower({ stock = [], robotJobs = [], setRobotJobs = () => {}, addTx = () => {}, notify = () => {} }) {
+  const assets = [
+    { id: "ASRS-01", type: "ASRS", status: "Online", queue: 8, health: 94, job: "Retrieve LPN-000311 → PREWORK" },
+    { id: "MINILOAD-01", type: "Miniload", status: "Online", queue: 14, health: 91, job: "Pick SSD Kingston → PICK-PACK" },
+    { id: "CONV-01", type: "Conveyor", status: "Standby", queue: 3, health: 88, job: "รอ Console Order ชั้น 1" },
+    { id: "SORTER-01", type: "Sorter", status: "Online", queue: 5, health: 96, job: "Sort by Carrier / Route" },
+    { id: "PREWORK-MC-03", type: "Sticker Machine", status: "Online", queue: 2, health: 89, job: "Sticker Size S · Logitech" },
+  ];
+  const jobs = [
+    ...robotJobs,
+    { id: "WES-9001", source: "ASRS", command: "Move ASRS → Prework", lpn: "LPN-000311", itemId: "6425011089", qty: 300, status: "Sent to API", eta: "00:07" },
+    { id: "WES-9002", source: "Miniload", command: "Retrieve → Pick Station", lpn: "LPN-000310", itemId: "6425011089", qty: 40, status: "In Progress", eta: "00:03" },
+    { id: "WES-9003", source: "Conveyor", command: "Console Floor 2/3 → Pack 1", lpn: "-", itemId: "6425011001", qty: 25, status: "Waiting Release", eta: "00:12" },
+  ].slice(0, 10);
+  const createJob = () => {
+    const row = stock.find((r) => locOf(r.loc)?.system === "ASRS" || locOf(r.loc)?.system === "Miniload") || stock[0];
+    const job = { id: `WES-${Date.now().toString().slice(-5)}`, source: locOf(row?.loc)?.system || "Manual", command: "Auto Dispatch Move Task", lpn: row?.lpn || "-", itemId: row?.itemId || "", qty: Math.min(50, Number(row?.qty || 1)), status: "Queued", eta: "00:05" };
+    setRobotJobs((list) => [job, ...list].slice(0, 8));
+    addTx({ type: "WES API Command", detail: `${job.id}: ${job.command} ${job.lpn} ${job.qty} หน่วย`, itemId: job.itemId, lpn: job.lpn, loc: row?.loc });
+    notify("สร้าง WES Command แล้ว", `${job.id} ถูกส่งเข้าคิว ${job.source}`, "success");
+  };
+  return (
+    <>
+      <div className="section-title">WES Control Tower — คน + เครื่องจักร + API ทำงานร่วมกัน</div>
+      <div className="grid g5" style={{ marginBottom: 14 }}>
+        {assets.map((a) => (
+          <div className="lp-card wes-asset" key={a.id}>
+            <div className="lp-icon"><Bot size={18} /></div>
+            <div>
+              <div className="lp-label">{a.type}</div>
+              <div className="lp-value" style={{ fontSize: 20 }}>{a.id}</div>
+              <div className="kpi-sub">{a.status} · Queue {a.queue}</div>
+              <div className="util-line"><i style={{ width: `${a.health}%` }} /></div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="grid g2" style={{ marginBottom: 14 }}>
+        <div className="lp-panel">
+          <h3>Automation Orchestration</h3>
+          {assets.map((a) => <div className="recall-row" key={a.id}><span>{a.id}</span><span>{a.job}</span></div>)}
+          <button className="btn" style={{ marginTop: 12 }} onClick={createJob}><Send size={13} /> สร้างคำสั่ง WES ตัวอย่าง</button>
+        </div>
+        <div className="lp-panel">
+          <h3>WES SLA</h3>
+          <LpCard icon={Timer} label="Avg API Latency" value="46 ms" sub="ASRS / Miniload / Conveyor" variant="good" progress={84} />
+          <LpCard icon={ShieldCheck} label="Fallback Ready" value="Manual" sub="ถ้า API ล่ม สร้าง Handheld Move Task ทันที" variant="plan" progress={72} />
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Job</th><th>Source</th><th>Command</th><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Qty</th><th>Status</th><th>ETA</th></tr></thead>
+          <tbody>
+            {jobs.map((j) => <tr key={j.id}><td className="mono">{j.id}</td><td>{j.source}</td><td>{j.command}</td><td className="mono">{j.lpn}</td><td className="mono">{j.itemId}</td><td>{itemOf(j.itemId)?.name || "-"}</td><td className="mono">{j.qty}</td><td><span className={`status-badge ${j.status === "In Progress" ? "blue" : ""}`}>{j.status}</span></td><td className="mono">{j.eta}</td></tr>)}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function ExceptionCenter({ stock = [], poList = [], allocOrders = [], pickTasks = [], csCases = [], returnTickets = [], addTx = () => {}, notify = () => {} }) {
+  const exceptions = [
+    ...allocOrders.flatMap((o) => (o.items || o.lines || []).map((l) => {
+      const qty = Number(l.qty || l.orderQty || 0);
+      const itemStock = stockQtyOf(stock, l.itemId);
+      return itemStock < qty ? { type: "Inventory Not Enough", severity: "red", owner: "Allocation", ref: o.id, itemId: l.itemId, detail: `ต้องการ ${qty} แต่มีพร้อมจ่าย ${itemStock}` } : null;
+    }).filter(Boolean)),
+    ...stock.filter((r) => stickerStateOfStock(r).required && !stickerStateOfStock(r).ok && itemOf(r.itemId)?.dailySales >= 50).map((r) => ({ type: "Sticker Not Ready", severity: "yellow", owner: "Prework", ref: r.lpn, itemId: r.itemId, detail: `${r.lpn} อยู่ ${r.loc} แต่ยังไม่ติด Sticker และเป็น Fast-moving` })),
+    ...poList.filter((p) => p.actualPlant && p.actualPlant !== plannedPlantOfPo(p)).map((p) => ({ type: "Plant Mismatch", severity: "red", owner: "Receiving", ref: p.po, itemId: poLinesOf(p)[0]?.itemId || p.itemId, detail: `เปิดลง ${plantLabelOf(plannedPlantOfPo(p))} แต่รับจริง ${plantLabelOf(p.actualPlant)}` })),
+    ...pickTasks.filter((t) => t.status !== "Completed").slice(0, 4).map((t) => ({ type: "Picking Backlog", severity: "blue", owner: "Picking", ref: t.order || t.id, itemId: t.itemId, detail: `${t.qty} หน่วย ที่ ${t.loc} · ${t.status}` })),
+    ...returnTickets.filter((t) => t.step < 4).map((t) => ({ type: "Return Not Closed", severity: "yellow", owner: "Returns", ref: t.id, itemId: t.itemId, detail: `${t.reason} · Step ${t.step}/4` })),
+    ...csCases.filter((c) => c.status !== "Closed").slice(0, 4).map((c) => ({ type: "CS Case Open", severity: c.kpiImpact === "InFull" ? "red" : "yellow", owner: c.faultOwner || "CS", ref: c.id, itemId: c.itemId, detail: `${c.issueType} · ${c.customer}` })),
+  ].slice(0, 30);
+  const ack = (e) => {
+    addTx({ type: "Exception Acknowledge", detail: `${e.type}: ${e.ref} · ${e.detail}`, itemId: e.itemId, orderId: e.ref });
+    notify("รับทราบ Exception แล้ว", `${e.type} · ${e.ref}`, "success");
+  };
+  const counts = {
+    red: exceptions.filter((e) => e.severity === "red").length,
+    yellow: exceptions.filter((e) => e.severity === "yellow").length,
+    blue: exceptions.filter((e) => e.severity === "blue").length,
+  };
+  return (
+    <>
+      <div className="section-title">Exception Center — Problem Resolution Dashboard</div>
+      <div className="grid g4" style={{ marginBottom: 14 }}>
+        <LpCard icon={ShieldAlert} label="Critical" value={counts.red} sub="ต้องแก้ก่อนปล่อยงาน" variant={counts.red ? "bad" : "good"} progress={counts.red * 14} />
+        <LpCard icon={AlertTriangle} label="Warning" value={counts.yellow} sub="เสี่ยงกระทบ SLA" variant="plan" progress={counts.yellow * 10} />
+        <LpCard icon={Clock} label="Backlog" value={counts.blue} sub="รอติดตามสถานะ" variant="info" progress={counts.blue * 10} />
+        <LpCard icon={CheckCircle2} label="Auto-rule Coverage" value="78%" sub="Rule + AI ตรวจจับได้" variant="good" progress={78} />
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Severity</th><th>Type</th><th>Owner</th><th>Reference</th><th>SYNNEX ID</th><th>Item Name</th><th>Detail</th><th>Action</th></tr></thead>
+          <tbody>
+            {exceptions.map((e, i) => (
+              <tr key={`${e.type}-${e.ref}-${i}`}>
+                <td><span className={`priority-pill ${e.severity}`}>{e.severity.toUpperCase()}</span></td>
+                <td>{e.type}</td><td>{e.owner}</td><td className="mono">{e.ref}</td><td className="mono">{e.itemId || "-"}</td><td>{itemOf(e.itemId)?.name || "-"}</td><td>{e.detail}</td>
+                <td><button className="btn secondary" onClick={() => ack(e)}><CheckCircle2 size={13} /> รับทราบ</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+/* ================================================================== */
 /* INTEGRATIONS + DISPATCH PLANNING + AI LOG                           */
 /* ================================================================== */
 
@@ -5683,11 +6042,23 @@ function GlobalStyle() {
       .ai-pill{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--teal);background:rgba(23,169,192,0.1);border:1px solid rgba(23,169,192,0.3);padding:5px 10px;border-radius:20px;}
       .ai-pill .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 1.8s infinite;}
       .export-btn{gap:6px;white-space:nowrap;}
+      .layout-toggle.active{background:rgba(62,126,224,.18);border-color:var(--amber);color:var(--amber);}
       @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(23,169,192,.5);}70%{box-shadow:0 0 0 6px rgba(23,169,192,0);}100%{box-shadow:0 0 0 0 rgba(23,169,192,0);}}
       .content{flex:1;overflow-y:auto;padding:24px;}
       .content::-webkit-scrollbar{width:8px;} .content::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
-      .grid{display:grid;gap:14px;} .g4{grid-template-columns:repeat(4,1fr);} .g3{grid-template-columns:repeat(3,1fr);} .g2{grid-template-columns:repeat(2,1fr);}
-      @media (max-width:1000px){.g4,.g3,.g2{grid-template-columns:1fr 1fr;}}
+      .free-layout-toolbar{position:sticky;bottom:12px;z-index:45;display:flex;align-items:center;gap:10px;margin:18px auto 0;width:max-content;max-width:calc(100% - 24px);background:#10213F;color:#FFFFFF;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:9px 12px;box-shadow:0 10px 28px rgba(16,33,63,.24);font-size:12px;}
+      .free-layout-toolbar button{border:1px solid rgba(255,255,255,.26);background:rgba(255,255,255,.10);color:#FFFFFF;border-radius:999px;padding:5px 10px;cursor:pointer;font-size:11px;}
+      .free-layout-enabled{padding-bottom:60px;}
+      .free-widget{outline:1px dashed rgba(62,126,224,.42);outline-offset:3px;transition:outline-color .15s, box-shadow .15s;will-change:transform,width,height;}
+      .free-widget:hover{outline-color:rgba(62,126,224,.8);box-shadow:0 10px 26px rgba(47,103,255,.12);}
+      .free-drag-handle{position:absolute;top:6px;right:8px;z-index:25;display:flex;align-items:center;gap:6px;height:25px;padding:0 6px;border-radius:999px;background:rgba(16,33,63,.92);color:#FFFFFF;font-size:10.5px;cursor:grab;user-select:none;box-shadow:0 4px 12px rgba(16,33,63,.18);}
+      .free-drag-handle:active{cursor:grabbing;}
+      .free-drag-handle button{height:18px;border:0;border-radius:999px;background:rgba(255,255,255,.16);color:#FFFFFF;font-size:9.5px;padding:0 6px;cursor:pointer;}
+      .free-resize-handle{position:absolute;right:3px;bottom:3px;z-index:26;width:18px;height:18px;border-radius:5px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 0 44%,rgba(62,126,224,.95) 45% 56%,transparent 57%),linear-gradient(135deg,transparent 0 66%,rgba(62,126,224,.95) 67% 78%,transparent 79%);}
+      .free-widget .recharts-responsive-container{min-height:120px;}
+      .grid{display:grid;gap:14px;} .g5{grid-template-columns:repeat(5,1fr);} .g4{grid-template-columns:repeat(4,1fr);} .g3{grid-template-columns:repeat(3,1fr);} .g2{grid-template-columns:repeat(2,1fr);}
+      @media (max-width:1180px){.g5{grid-template-columns:repeat(3,1fr);}}
+      @media (max-width:1000px){.g5,.g4,.g3,.g2{grid-template-columns:1fr 1fr;}}
       .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;}
       .card.clickable{cursor:pointer;transition:border-color .15s;} .card.clickable:hover{border-color:var(--amber);}
       .card.sel{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal);}
@@ -5709,6 +6080,15 @@ function GlobalStyle() {
       .util-track.age-ok i{background:var(--success);}
       .util-track.age-warn i{background:var(--amber);}
       .util-track.age-risk i{background:var(--danger);}
+      .util-line{height:8px;border-radius:999px;background:var(--panel-raised);border:1px solid var(--border);overflow:hidden;margin:10px 0;}
+      .util-line i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--success),var(--amber),var(--teal));}
+      .priority-pill{display:inline-flex;align-items:center;justify-content:center;min-width:42px;border-radius:999px;padding:4px 9px;font-family:'JetBrains Mono';font-weight:900;font-size:11px;}
+      .priority-pill.red{background:rgba(241,91,113,.18);color:var(--danger);border:1px solid rgba(241,91,113,.35);}
+      .priority-pill.yellow{background:rgba(245,168,60,.2);color:#A46400;border:1px solid rgba(245,168,60,.42);}
+      .priority-pill.blue{background:rgba(62,126,224,.14);color:var(--amber);border:1px solid rgba(62,126,224,.32);}
+      .txt-danger{color:var(--danger)!important;font-weight:800;}
+      .optimizer-plant h3,.wes-asset .lp-value{word-break:break-word;}
+      .wes-asset{min-height:132px;}
       .section-title{font-family:'Space Grotesk';font-size:13.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:28px 0 12px;}
       .section-title:first-child{margin-top:0;}
       .pipeline{display:flex;align-items:stretch;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 20px;overflow-x:auto;}
