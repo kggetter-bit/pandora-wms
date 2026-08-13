@@ -206,6 +206,10 @@ const stickerStatusBadge = (row) => {
   return <span className="status-badge" style={{ background: color }}>{s.label}</span>;
 };
 const stickerSizeForItem = (item) => item?.stickerSize || sizeGroupOf(item).stickerSize || sizeGroupOf(item).code || "M";
+const preworkRequiredOf = (item) => Boolean(item?.preworkRequired ?? item?.stickerRequired);
+const bypassPreworkAllowedOf = (item) => Boolean(item?.bypassPreworkAllowed ?? preworkRequiredOf(item));
+const defaultPreworkFlowOf = (item) => item?.defaultPreworkFlow || (preworkRequiredOf(item) ? "Sticker / VAS ก่อนขาย" : "ไม่ต้อง Prework");
+const nextDestinationAfterPreworkOf = (item) => item?.nextAfterPrework || (Number(item?.dailySales || 0) >= 50 ? "PICK-PACK" : "MZ-01-01-A");
 
 // Current stock — now with LPN + age (days since received) for Aging / Hold reports
 const STOCK_INIT = [
@@ -625,7 +629,7 @@ const getExportRows = (view, ctx) => {
     prework: () => ctx.stickerTasks || [], returns: returnRows, cs: csRows, warehouse3d: stockRows, invhold: stockRows, aging: stockRows, cover: stockRows,
     recall: stockRows, people: () => ctx.users || [], integrations: summaryRows, dispatch: orderRows, ai: () => ctx.aiLog || [],
     optimization: optimizationRows, wes: () => ctx.robotJobs || [], exceptions: exceptionRows,
-    master: () => ITEMS.map((i) => ({ SYNNEX_ID: i.id, Item_Code: i.itemCode, Name: i.name, Brand: i.brand, Size: i.sizeClass, Pack_Key: i.packKey })),
+    master: () => ITEMS.map((i) => ({ SYNNEX_ID: i.id, Item_Code: i.itemCode, Name: i.name, Brand: i.brand, Prework_Required: preworkRequiredOf(i) ? "Y" : "N", Bypass_To_Prework_Allowed: bypassPreworkAllowedOf(i) ? "Y" : "N", Default_Prework_Flow: defaultPreworkFlowOf(i), Next_After_Prework: nextDestinationAfterPreworkOf(i), Sticker_Required: i.stickerRequired ? "Y" : "N", Sticker_Size: stickerSizeForItem(i), Size: sizeGroupOf(i).code, Pack_Key: i.packKey })),
   };
   return (map[view] || summaryRows)();
 };
@@ -2139,7 +2143,15 @@ function MasterData() {
   const filtered = ITEMS.filter((it) => (it.name + it.id + it.itemCode + it.partId + it.partNo + it.brand).toLowerCase().includes(q.toLowerCase()));
 
   const saveItem = (form) => {
-    const clean = { ...form, receiveMinAgeDays: Number(form.receiveMinAgeDays ?? 0), receiveMaxAgeDays: Number(form.receiveMaxAgeDays ?? 3650) };
+    const clean = {
+      ...form,
+      receiveMinAgeDays: Number(form.receiveMinAgeDays ?? 0),
+      receiveMaxAgeDays: Number(form.receiveMaxAgeDays ?? 3650),
+      preworkRequired: Boolean(form.preworkRequired ?? form.stickerRequired),
+      bypassPreworkAllowed: Boolean(form.bypassPreworkAllowed ?? form.preworkRequired ?? form.stickerRequired),
+      defaultPreworkFlow: form.defaultPreworkFlow || (form.stickerRequired ? "Sticker / VAS ก่อนขาย" : "ไม่ต้อง Prework"),
+      nextAfterPrework: form.nextAfterPrework || "MZ-01-01-A",
+    };
     if (clean._editing) ITEMS = ITEMS.map((it) => (it.id === clean.id ? clean : it));
     else ITEMS = [...ITEMS, clean];
     setItemModal(null); bump();
@@ -2174,15 +2186,15 @@ function MasterData() {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
             <div className="search-box" style={{ marginBottom: 0 }}><Search size={15} color="var(--muted)" /><input placeholder="ค้นหา SYNNEX ID / Item ID / Part ID / Part No / Brand / ชื่อสินค้า…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-            <button className="btn" onClick={() => setItemModal({ id: "", partId: "", itemCode: "", brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })}><PlusCircle size={13} /> เพิ่มสินค้าใหม่</button>
+            <button className="btn" onClick={() => setItemModal({ id: "", partId: "", itemCode: "", brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, preworkRequired: true, bypassPreworkAllowed: true, defaultPreworkFlow: "Sticker / VAS ก่อนขาย", nextAfterPrework: "MZ-01-01-A", receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })}><PlusCircle size={13} /> เพิ่มสินค้าใหม่</button>
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>SYNNEX ID</th><th>Item ID</th><th>Brand</th><th>ชื่อสินค้า</th><th>Receiving Min Age</th><th>Receiving Max Age</th><th>ต้องติด Sticker</th><th>Sticker Size</th><th>Part ID</th><th>Part No.</th><th>ABC</th><th>Size</th><th>TixHi</th><th>Length cm</th><th>Width cm</th><th>Height cm</th><th>Weight kg</th><th></th></tr></thead>
+              <thead><tr><th>SYNNEX ID</th><th>Item ID</th><th>Brand</th><th>ชื่อสินค้า</th><th>Receiving Min Age</th><th>Receiving Max Age</th><th>ต้อง Prework</th><th>Bypass to Prework</th><th>Next After Prework</th><th>ต้องติด Sticker</th><th>Sticker Size</th><th>Part ID</th><th>Part No.</th><th>ABC</th><th>Size</th><th>TixHi</th><th>Length cm</th><th>Width cm</th><th>Height cm</th><th>Weight kg</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((it) => (
                   <tr key={it.id} className="clickable" onClick={() => setDetail(it)}>
-                    <td className="mono">{it.id}</td><td className="mono">{it.itemCode}</td><td>{it.brand}</td><td>{it.name}</td><td className="mono">{receivingAgeRuleOf(it).minAgeDays} วัน</td><td className="mono">{receivingAgeRuleOf(it).maxAgeDays} วัน</td><td>{it.stickerRequired ? <span className="scan-step done">ต้องติด</span> : <span className="kpi-sub">ไม่ต้องติด</span>}</td><td><span className="status-badge" style={{ background: "var(--teal)" }}>{stickerSizeForItem(it)}</span></td><td className="mono">{it.partId}</td><td className="mono">{it.partNo}</td>
+                    <td className="mono">{it.id}</td><td className="mono">{it.itemCode}</td><td>{it.brand}</td><td>{it.name}</td><td className="mono">{receivingAgeRuleOf(it).minAgeDays} วัน</td><td className="mono">{receivingAgeRuleOf(it).maxAgeDays} วัน</td><td>{preworkRequiredOf(it) ? <span className="scan-step active">ต้อง Prework</span> : <span className="kpi-sub">ไม่ต้อง</span>}</td><td>{bypassPreworkAllowedOf(it) ? <span className="scan-step done">Allowed</span> : <span className="kpi-sub">No</span>}</td><td className="mono">{nextDestinationAfterPreworkOf(it)}</td><td>{it.stickerRequired ? <span className="scan-step done">ต้องติด</span> : <span className="kpi-sub">ไม่ต้องติด</span>}</td><td><span className="status-badge" style={{ background: "var(--teal)" }}>{stickerSizeForItem(it)}</span></td><td className="mono">{it.partId}</td><td className="mono">{it.partNo}</td>
                     <td><span className={`badge ${it.abc}`}>{it.abc}</span></td><td><SizeBadge item={it} /></td><td className="mono">{it.tixHi}</td>
                     <td className="mono">{it.dim.l}</td><td className="mono">{it.dim.w}</td><td className="mono">{it.dim.h}</td><td className="mono">{it.dim.wt}</td>
                     <td style={{ display: "flex", gap: 6 }}>
@@ -2197,7 +2209,7 @@ function MasterData() {
         </>
       )}
 
-      {tab === "synnex" && <SynnexIdRulePanel onCreateItem={(id) => setItemModal({ id, partId: "", itemCode: id, brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })} />}
+      {tab === "synnex" && <SynnexIdRulePanel onCreateItem={(id) => setItemModal({ id, partId: "", itemCode: id, brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, preworkRequired: true, bypassPreworkAllowed: true, defaultPreworkFlow: "Sticker / VAS ก่อนขาย", nextAfterPrework: "MZ-01-01-A", receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })} />}
 
       {tab === "loc" && (
         <>
@@ -2426,6 +2438,20 @@ function ItemFormModal({ form: init, onClose, onSave }) {
         <input type="checkbox" checked={!!f.stickerRequired} onChange={(e) => setF({ ...f, stickerRequired: e.target.checked })} style={{ marginRight: 6 }} />
         ต้องติดสติ๊กเกอร์ก่อนขาย / Allocate
       </label>
+      <div className="grid g2">
+        <label className="chip active" style={{ width: "fit-content", marginBottom: 12 }}>
+          <input type="checkbox" checked={preworkRequiredOf(f)} onChange={(e) => setF({ ...f, preworkRequired: e.target.checked, bypassPreworkAllowed: e.target.checked ? f.bypassPreworkAllowed ?? true : false })} style={{ marginRight: 6 }} />
+          ต้องทำ Prework / VAS ก่อนขาย
+        </label>
+        <label className="chip active" style={{ width: "fit-content", marginBottom: 12 }}>
+          <input type="checkbox" checked={bypassPreworkAllowedOf(f)} onChange={(e) => setF({ ...f, bypassPreworkAllowed: e.target.checked })} style={{ marginRight: 6 }} />
+          อนุญาต Bypass รับเข้า → PREWORK
+        </label>
+      </div>
+      <div className="grid g2">
+        <div className="field"><label>Default Prework Flow</label><input value={f.defaultPreworkFlow || defaultPreworkFlowOf(f)} onChange={(e) => setF({ ...f, defaultPreworkFlow: e.target.value })} placeholder="Sticker / VAS ก่อนขาย" /></div>
+        <div className="field"><label>Next Destination หลัง Prework</label><select value={f.nextAfterPrework || nextDestinationAfterPreworkOf(f)} onChange={(e) => setF({ ...f, nextAfterPrework: e.target.value })}><option value="MZ-01-01-A">MZ-01-01-A · Putaway / Miniload</option><option value="PICK-PACK">PICK-PACK · Bypass to Picking</option><option value="A-03-12-B">A-03-12-B · Pick Face</option><option value="X-QC-01">X-QC-01 · Hold / QC</option></select></div>
+      </div>
       <div className="field"><label>Sticker Size Override</label><select value={f.stickerSize || ""} onChange={(e) => setF({ ...f, stickerSize: e.target.value || undefined })}><option value="">Auto ตาม Size Group</option><option>S</option><option>M</option><option>L</option></select></div>
       <div className="grid g2">
         <div className="field"><label>TixHi (Ti x Hi)</label><input value={f.tixHi} onChange={(e) => setF({ ...f, tixHi: e.target.value })} placeholder="เช่น 8x5" /></div>
@@ -2730,7 +2756,7 @@ function AppointmentScheduling({ dockSlots, setDockSlots, poList, setPoList, add
 /* RECEIVING                                                            */
 /* ================================================================== */
 
-function Receiving({ dockSlots, setDockSlots, poList, setPoList, stock = [], setStock, addTx, serialUnits, setSerialUnits, notify = () => {}, userSession }) {
+function Receiving({ dockSlots, setDockSlots, poList, setPoList, stock = [], setStock, addTx, serialUnits, setSerialUnits, stickerTasks = [], setStickerTasks = () => {}, notify = () => {}, userSession }) {
   const [tab, setTab] = useState("dock");
   const [booking, setBooking] = useState(false);
   const [form, setForm] = useState({ supplier: "", time: "", dock: "Dock-1", plate: "" });
@@ -2859,7 +2885,7 @@ function Receiving({ dockSlots, setDockSlots, poList, setPoList, stock = [], set
           })}
         </>
       )}
-      {tab === "hh" && <HandheldReceiving poList={poList} setPoList={setPoList} stock={stock} setStock={setStock} addTx={addTx} serialUnits={serialUnits} setSerialUnits={setSerialUnits} notify={notify} userSession={userSession} />}
+      {tab === "hh" && <HandheldReceiving poList={poList} setPoList={setPoList} stock={stock} setStock={setStock} addTx={addTx} serialUnits={serialUnits} setSerialUnits={setSerialUnits} stickerTasks={stickerTasks} setStickerTasks={setStickerTasks} notify={notify} userSession={userSession} />}
       {tab === "sum" && <ReceivingSummary poList={poList} serialUnits={serialUnits} />}
     </>
   );
@@ -2942,7 +2968,7 @@ function ReceivingStorageAdvisor({ poList = [], stock = [], addTx = () => {}, no
   );
 }
 
-function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, serialUnits, setSerialUnits, notify = () => {}, userSession }) {
+function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, serialUnits, setSerialUnits, stickerTasks = [], setStickerTasks = () => {}, notify = () => {}, userSession }) {
   const [active, setActive] = useState(null);
   const [lineIdx, setLineIdx] = useState(0);
   const [qty, setQty] = useState("");
@@ -2954,6 +2980,7 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
   const [mfgDate, setMfgDate] = useState("2569-06-01");
   const [actualPlant, setActualPlant] = useState(workerPlantOf(userSession));
   const [plantDecision, setPlantDecision] = useState("");
+  const [receiveFlow, setReceiveFlow] = useState("auto");
   const [printed, setPrinted] = useState(false);
   const activeLine = active ? poLinesOf(active)[lineIdx] : null;
   const activeItem = itemOf(activeLine?.itemId || active?.itemId);
@@ -2962,14 +2989,18 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
   const activeRecommendation = active ? receivingStorageRecommendation(active, stock) : null;
   const plantMismatch = Boolean(active && actualPlant !== plannedPlant);
   const plantDecisionReady = !plantMismatch || Boolean(plantDecision);
+  const mustPrework = preworkRequiredOf(activeItem);
+  const canBypassPrework = bypassPreworkAllowedOf(activeItem);
+  const shouldBypassPrework = active && canBypassPrework && (receiveFlow === "prework" || (receiveFlow === "auto" && mustPrework));
+  const preworkBillExists = active ? stickerTasks.some((t) => t.order === active.po && t.itemId === (activeLine?.itemId || active.itemId) && !["Completed", "Completed & Moved"].includes(t.status)) : false;
   const openPo = (po) => {
     const first = poLinesOf(po)[0];
     setActive(po); setLineIdx(0); setQty(String(first?.expQty || po.expQty)); setRemark("ครบถ้วน");
-    setTrackingLevel(first?.trackingLevel || "Piece"); setRequireSerial(first?.needSn || first?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setActualPlant(workerPlantOf(userSession)); setPlantDecision(""); setPrinted(false);
+    setTrackingLevel(first?.trackingLevel || "Piece"); setRequireSerial(first?.needSn || first?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setActualPlant(workerPlantOf(userSession)); setPlantDecision(""); setReceiveFlow(preworkRequiredOf(itemOf(first?.itemId || po.itemId)) ? "auto" : "staging"); setPrinted(false);
   };
   const switchLine = (idx) => {
     const line = poLinesOf(active)[idx];
-    setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPlantDecision(""); setPrinted(false);
+    setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPlantDecision(""); setReceiveFlow(preworkRequiredOf(itemOf(line?.itemId)) ? "auto" : "staging"); setPrinted(false);
   };
 
   const parseScans = (actual, itemId, lpn) => {
@@ -3038,12 +3069,21 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
       notify("Reject Plant Mismatch", `${active.po}: ตีสินค้ากลับไป ${plantLabelOf(plannedPlant)}`, "danger");
     }
     if (!isAgeReject && !isPlantReject && actual > 0 && remark !== "ปฏิเสธรับ (Reject)") {
-      const stockStatus = remark === "สินค้าเสียหาย" ? "DMG" : "QC";
+      const stockStatus = remark === "สินค้าเสียหาย" ? "DMG" : shouldBypassPrework ? "AVL" : "QC";
       const lpn = `LPN-${rand(20000, 99999)}`;
       const stagingLoc = plantStagingLoc(actualPlant, stockStatus);
-      setStock((list) => [...list, { key: Date.now() + Math.random(), itemId, batch: `RCV-${active.po}`, lpn, loc: stagingLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match" }]);
+      const finalLoc = shouldBypassPrework ? "PREWORK" : stagingLoc;
+      const newKey = Date.now() + Math.random();
+      setStock((list) => [...list, { key: newKey, itemId, batch: `RCV-${active.po}`, lpn, loc: finalLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", stickerStatus: shouldBypassPrework ? "IN_PROGRESS" : item?.stickerRequired ? "PENDING" : undefined, preworkBypass: shouldBypassPrework, preworkBill: shouldBypassPrework ? `PW-BP-${active.po}-${lineIdx + 1}` : undefined }]);
       setSerialUnits((list) => [...parseScans(actual, itemId, lpn), ...list]);
       addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} รับจริง ${actual}/${expected} · Planned ${plantLabelOf(plannedPlant)} · Actual ${plantLabelOf(actualPlant)} · MFG ${mfgDate} · อายุ ${currentAgeCheck.ageDays} วัน → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
+      if (shouldBypassPrework) {
+        const billId = `PW-BP-${active.po}-${lineIdx + 1}`;
+        const nextToLoc = nextDestinationAfterPreworkOf(item);
+        const task = { id: billId, order: active.po, itemId, qtyRequired: actual, qtyDone: 0, source: "Inbound Bypass", machineNo: "", workDate: new Date().toISOString().slice(0, 10), status: "At Prework", note: `${defaultPreworkFlowOf(item)} · Bypass จากรับเข้า ไม่ต้อง Putaway ปกติ`, stockKey: newKey, lpn, fromLoc: stagingLoc, toLoc: "PREWORK", system: "Manual", moveStatus: "Bypassed", movedAt: new Date().toISOString(), stickerSize: stickerSizeForItem(item), priorityTone: "risk", nextMoveLabel: nextToLoc === "PICK-PACK" ? "By pass move to picking station" : "Move to Putaway / Miniload", nextToLoc };
+        setStickerTasks((list) => list.some((t) => t.id === billId) ? list : [task, ...list]);
+        addTx({ type: "Bypass Putaway to Prework", detail: `${active.po} · ${lpn}: QC Pass/Receive แล้ว Bypass ${stagingLoc} → PREWORK เพื่อ ${defaultPreworkFlowOf(item)} · เปิด Bill ${billId}`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: stagingLoc, toLoc: "PREWORK", loc: "PREWORK" });
+      }
     }
     setPrinted(true);
   };
@@ -3108,6 +3148,26 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
                   </div>
                 )}
               </div>
+              <div className="storage-mini-card prework-bypass-card">
+                <div className="storage-mini-title"><Tags size={14} /> Prework / Putaway Bypass Control</div>
+                <div className="scan-steps-row" style={{ marginBottom: 8 }}>
+                  <span className={`scan-step ${mustPrework ? "active" : "done"}`}>{mustPrework ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />} {mustPrework ? "SKU ต้องทำ Prework" : "SKU ไม่บังคับ Prework"}</span>
+                  <span className={`scan-step ${canBypassPrework ? "done" : ""}`}>{canBypassPrework ? <ShieldCheck size={11} /> : <ShieldAlert size={11} />} Bypass {canBypassPrework ? "Allowed" : "Blocked"}</span>
+                  {preworkBillExists && <span className="scan-step active"><ClipboardCheck size={11} /> มี Bill Prework ค้างอยู่</span>}
+                </div>
+                <div className="field">
+                  <label>ปลายทางหลังรับสินค้า</label>
+                  <select value={receiveFlow} onChange={(e) => setReceiveFlow(e.target.value)}>
+                    <option value="auto">Auto: ถ้า SKU ต้อง Prework ให้ Bypass ไป PREWORK</option>
+                    <option value="staging">รับเข้า STAGING-QC รอ Putaway ปกติ</option>
+                    <option value="prework" disabled={!canBypassPrework}>Bypass Putaway to PREWORK ทันที</option>
+                  </select>
+                </div>
+                <div className={`allocation-shortage ${shouldBypassPrework ? "prework-bypass-on" : ""}`}>
+                  {shouldBypassPrework ? <ArrowDownToLine size={14} /> : <Warehouse size={14} />}
+                  <span>{shouldBypassPrework ? `ระบบจะรับเข้า PREWORK และเปิด Bill Prework อัตโนมัติ · Next ${nextDestinationAfterPreworkOf(activeItem)}` : "ระบบจะรับเข้า Staging Area เพื่อ QC/Putaway ตามกระบวนการเดิม"}</span>
+                </div>
+              </div>
               <div className="scan-step" style={{ display: "inline-flex", marginBottom: 10, color: "var(--amber)", background: "rgba(62,126,224,.12)" }}><ShieldAlert size={11} /> ตรวจอายุรับเข้า: รับได้ {ageCheck.rule.minAgeDays}-{ageCheck.rule.maxAgeDays} วัน นับจากวันผลิตถึงวันที่รับเข้า</div>
               <div className="field"><label>PO Number</label><input value={active.po} disabled /></div>
               <div className="field"><label>จำนวนที่คาดรับ</label><input value={activeLine?.expQty || 0} disabled /></div>
@@ -3136,6 +3196,7 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
               <div className="kpi-sub">{active.po} · Line {lineIdx + 1} · {activeLine?.itemId} · {itemOf(activeLine?.itemId)?.name}</div>
               <div className="kpi-sub" style={{ margin: "8px 0" }}>รับจริง {ageCheck.ok && plantDecision !== "returnPlanned" ? qty : 0} / {activeLine?.expQty} หน่วย — {ageCheck.ok ? remark : `Reject: ${ageCheck.message}`}</div>
               <div className="kpi-sub" style={{ marginBottom: 8 }}>Planned {plantLabelOf(plannedPlant)} · Actual {plantLabelOf(actualPlant)} · {plantMismatch ? `Decision ${plantDecision || "-"}` : "Plant Match"}</div>
+              {shouldBypassPrework && <div className="scan-step active" style={{ display: "inline-flex", marginBottom: 8 }}><Tags size={11} /> Bypass to PREWORK แล้ว · เปิด Bill PW-BP-{active.po}-{lineIdx + 1}</div>}<br />
               <div className={`scan-step ${ageCheck.ok ? "done" : ""}`} style={{ display: "inline-flex", marginBottom: 8, color: ageCheck.ok ? undefined : "var(--danger)", background: ageCheck.ok ? undefined : "rgba(241,91,113,.10)" }}>{ageCheck.ok ? <ShieldCheck size={11} /> : <ShieldAlert size={11} />} อายุสินค้า {ageCheck.ageDays ?? "-"} วัน · MFG {mfgDate} · รับเข้า {receiveDate}</div><br />
               {ageCheck.ok ? <><div className="scan-step done" style={{ display: "inline-flex", marginBottom: 8 }}><ShieldCheck size={11} /> บันทึก SN/IMEI แล้ว {serialUnits.filter((u) => u.po === active.po).length} record</div><br /><div className="scan-step done" style={{ display: "inline-flex", marginBottom: 14 }}><CheckCircle2 size={11} /> พิมพ์ LPN Label สำเร็จ</div><br /></> : <><div className="scan-step" style={{ display: "inline-flex", marginBottom: 14, color: "var(--danger)", background: "rgba(241,91,113,.10)" }}><ShieldAlert size={11} /> ไม่สร้าง LPN / ไม่รับเข้า Stock</div><br /></>}
               <button className="btn secondary" onClick={() => setActive(null)}>เสร็จสิ้น กลับสู่คิวงาน</button>
@@ -6251,6 +6312,8 @@ function GlobalStyle() {
       .storage-mini-card{background:linear-gradient(135deg,rgba(62,126,224,.08),rgba(62,199,117,.08));border:1px solid rgba(62,126,224,.24);border-radius:12px;padding:12px;margin:10px 0 12px;}
       .storage-mini-title{display:flex;align-items:center;gap:7px;font-weight:800;font-size:12.5px;margin-bottom:8px;}
       .plant-mismatch-alert{color:var(--danger);background:rgba(241,91,113,.12);border-color:rgba(241,91,113,.35);}
+      .prework-bypass-card{background:linear-gradient(180deg,#F8FBFF,#EFF8FF);border-color:rgba(23,169,192,.28);}
+      .prework-bypass-on{background:rgba(23,169,192,.10)!important;border-color:rgba(23,169,192,.28)!important;color:var(--teal)!important;font-weight:800;}
       .compact-table table th,.compact-table table td{font-size:11px;padding:8px;}
       @media (max-width:800px){.storage-plant-compare{grid-template-columns:1fr;}}
       .profile-tag{font-size:11.5px;background:rgba(255,255,255,0.06);padding:4px 9px;border-radius:8px;color:var(--muted);}
