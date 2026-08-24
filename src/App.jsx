@@ -4371,6 +4371,31 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
       orderId: o.id, customer: o.customer, priority: o.priority, status: o.status, itemId: l.itemId, itemName: itemOf(l.itemId)?.name || "-", loc: s.loc, lpn: s.lpn || "-", qty: s.qty, picked: s.pickedQty || 0, worker: s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === o.id && t.itemId === l.itemId)?.assignee || "Manual Picker"), system: s.system,
     })));
   });
+  const allocationDashboardStats = {
+    pending: filteredOrders.filter((o) => o.status === "Pending").length,
+    active: filteredOrders.filter((o) => ["Allocated", "Released", "Partial", "Partial Released"].includes(o.status)).length,
+    shortage: filteredOrders.filter((o) => ["Backorder", "Partial", "Partial Released"].includes(o.status)).length,
+    totalQty: filteredOrders.reduce((sum, o) => sum + orderProgress(o).originalQty, 0),
+  };
+  const allocationTimelineRows = filteredOrders.slice(0, 8).map((o, idx) => {
+    const p = orderProgress(o);
+    const pickedPct = p.originalQty ? Math.round((p.pickedQty / p.originalQty) * 100) : 0;
+    const allocatedPct = p.originalQty ? Math.round((p.allocatedQty / p.originalQty) * 100) : 0;
+    const tone = ["Backorder", "Cancelled"].includes(o.status) ? "danger"
+      : ["Pending", "Partial", "Partial Released"].includes(o.status) ? "amber"
+      : pickedPct >= 100 ? "success" : "teal";
+    return {
+      order: o,
+      progress: p,
+      meta: o._meta || metaOf(o, idx),
+      pickedPct: Math.min(100, pickedPct),
+      allocatedPct: Math.min(100, allocatedPct),
+      start: Math.min(62, 5 + (idx * 7)),
+      width: Math.max(14, Math.min(88, allocatedPct || (o.status === "Pending" ? 18 : 28))),
+      dueHours: Math.max(0, 6 + idx * 8 - (o.priority === "SLA Risk" ? 7 : 0) - (o.priority === "VIP" ? 3 : 0)),
+      tone,
+    };
+  });
 
   return (
     <>
@@ -4379,6 +4404,45 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
         1) <b>Allocate</b> จองสต็อก (AVL → Allocated) — สามารถ <b>Un-Allocate</b> คืนสต็อกได้ก่อน Release · 2) <b>Release Order</b> จึงจะส่งคำสั่งให้ Robot (ASRS/Miniload) หรือสร้าง Pick Task ให้พนักงาน · 3) เมื่อ Pick/Scan สำเร็จ สถานะสินค้าเปลี่ยนเป็น <b>Picked</b> พร้อมส่ง Pack Station
       </div>
       <div style={{ marginBottom: 16 }}><button className="btn secondary" onClick={() => setManualOpen(true)}><PlusCircle size={13} /> สร้าง Order Manual เพื่อ Allocate</button></div>
+
+      <div className="alloc-control-hero">
+        <div>
+          <div className="alloc-control-title"><span><ClipboardList size={24} /></span><div><h2>Allocation Control</h2><p>Plan stock reservation, release wave, and monitor pick readiness in one view.</p></div></div>
+          <div className="alloc-control-summary">{filteredOrders.length} Orders · {allocationDashboardStats.totalQty.toLocaleString()} Units · Live stock reservation timeline</div>
+        </div>
+        <button className="btn primary" onClick={() => setManualOpen(true)}><PlusCircle size={14} /> New Manual Order</button>
+      </div>
+      <div className="alloc-control-kpis">
+        <div className="alloc-control-kpi teal"><div><span>Pending Orders</span><b>{allocationDashboardStats.pending}</b></div><Clock size={22} /></div>
+        <div className="alloc-control-kpi blue"><div><span>Allocated / Released</span><b>{allocationDashboardStats.active}</b></div><Send size={22} /></div>
+        <div className="alloc-control-kpi amber"><div><span>Short / Partial</span><b>{allocationDashboardStats.shortage}</b></div><AlertTriangle size={22} /></div>
+        <div className="alloc-control-kpi green"><div><span>Total Demand</span><b>{allocationDashboardStats.totalQty.toLocaleString()}</b></div><Boxes size={22} /></div>
+      </div>
+      <div className="alloc-timeline-panel">
+        <div className="alloc-timeline-head">
+          <div><b>Allocation Timeline</b><span>Order reservation and pick progress by sequence</span></div>
+          <small>Current marker = Picked progress</small>
+        </div>
+        <div className="alloc-timeline-axis"><span>Sales Order</span><span>Allocate</span><span>Release</span><span>Pick</span><span>Pack / Ship</span></div>
+        <div className="alloc-timeline-list">
+          {allocationTimelineRows.map((row) => (
+            <div className="alloc-timeline-row" key={row.order.id} onClick={() => setDetailOrderId(row.order.id)}>
+              <div className="alloc-timeline-label">
+                <b>{row.order.id}</b>
+                <span>{row.order.customer}</span>
+                <em>{row.order.priority} · {row.meta.route}</em>
+              </div>
+              <div className="alloc-timeline-track">
+                <i className="alloc-timeline-today" style={{ left: `${row.pickedPct}%` }} />
+                <div className={`alloc-timeline-bar ${row.tone}`} style={{ left: `${row.start}%`, width: `${row.width}%` }}>
+                  <span>{row.progress.allocatedQty}/{row.progress.originalQty}</span>
+                </div>
+              </div>
+              <div className={`alloc-timeline-due ${row.tone}`}>{row.pickedPct >= 100 ? "Complete" : `${row.dueHours}h`}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="allocation-filter-panel">
         <div className="search-box allocation-search"><Search size={15} color="var(--muted)" /><input placeholder="ค้นหา Order / ลูกค้า / ช่องทาง / สายส่ง / ภูมิภาค" value={filters.q} onChange={(e) => setFilters({ ...filters, q: e.target.value })} /></div>
@@ -6209,6 +6273,47 @@ function GlobalStyle() {
       .scan-steps-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
       .scan-input-row{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px;}
       .scan-input-row .btn{padding-left:10px;padding-right:10px;}
+      .alloc-control-hero{display:flex;justify-content:space-between;align-items:center;gap:18px;background:linear-gradient(135deg,#F8FBFF 0%,#EEF6FF 58%,#F4FFFB 100%);border:1px solid #D8E5F4;border-radius:18px;padding:20px 22px;margin:16px 0 14px;box-shadow:0 14px 34px rgba(22,35,61,.08);}
+      .alloc-control-title{display:flex;align-items:center;gap:13px;}
+      .alloc-control-title>span{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#28C4A6,#3E7EE0);color:#FFFFFF;box-shadow:0 12px 25px rgba(62,126,224,.22);}
+      .alloc-control-title h2{margin:0;color:var(--navy);font-size:24px;font-family:'Space Grotesk';letter-spacing:0;}
+      .alloc-control-title p{margin:3px 0 0;color:var(--muted);font-size:12.5px;font-weight:700;}
+      .alloc-control-summary{margin-top:10px;color:#667085;font-size:12.5px;font-weight:800;}
+      .alloc-control-kpis{display:grid;grid-template-columns:repeat(4,minmax(160px,1fr));gap:12px;margin-bottom:14px;}
+      .alloc-control-kpi{position:relative;overflow:hidden;min-height:86px;background:#FFFFFF;border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 10px 28px rgba(22,35,61,.07);}
+      .alloc-control-kpi:after{content:"";position:absolute;right:-18px;top:-30px;width:94px;height:94px;border-radius:50%;opacity:.18;}
+      .alloc-control-kpi span{display:block;color:#667085;font-size:12px;font-weight:900;margin-bottom:9px;}
+      .alloc-control-kpi b{font-family:'Space Grotesk';font-size:28px;color:var(--navy);}
+      .alloc-control-kpi svg{position:relative;z-index:1;}
+      .alloc-control-kpi.teal svg{color:#28C4A6}.alloc-control-kpi.teal:after{background:#28C4A6;}
+      .alloc-control-kpi.blue svg{color:#3E7EE0}.alloc-control-kpi.blue:after{background:#3E7EE0;}
+      .alloc-control-kpi.amber svg{color:#F5A83C}.alloc-control-kpi.amber:after{background:#F5A83C;}
+      .alloc-control-kpi.green svg{color:#3EC775}.alloc-control-kpi.green:after{background:#3EC775;}
+      .alloc-timeline-panel{background:#FFFFFF;border:1px solid var(--border);border-radius:18px;padding:18px 20px;margin-bottom:16px;box-shadow:0 14px 36px rgba(22,35,61,.08);}
+      .alloc-timeline-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:14px;}
+      .alloc-timeline-head b{display:block;color:var(--navy);font-size:15px;}
+      .alloc-timeline-head span{display:block;color:var(--muted);font-size:12px;font-weight:700;margin-top:4px;}
+      .alloc-timeline-head small{font-size:11px;color:#7A8798;font-weight:800;}
+      .alloc-timeline-axis{display:grid;grid-template-columns:220px repeat(4,1fr) 78px;gap:10px;margin-bottom:8px;color:#8A96A8;font-size:10.5px;font-weight:900;text-transform:uppercase;}
+      .alloc-timeline-axis span:first-child{grid-column:1;}
+      .alloc-timeline-list{display:flex;flex-direction:column;}
+      .alloc-timeline-row{display:grid;grid-template-columns:220px 1fr 78px;gap:10px;align-items:center;min-height:52px;border-top:1px solid rgba(214,222,232,.7);cursor:pointer;}
+      .alloc-timeline-row:hover{background:#F8FBFF;}
+      .alloc-timeline-label b{display:block;font-family:'JetBrains Mono';font-size:12px;color:var(--navy);}
+      .alloc-timeline-label span{display:block;font-size:12px;color:var(--text);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .alloc-timeline-label em{display:block;font-style:normal;font-size:10.5px;color:#7A8798;}
+      .alloc-timeline-track{position:relative;height:28px;background:#EEF3F9;border-radius:999px;overflow:hidden;box-shadow:inset 0 0 0 1px #E2EAF4;}
+      .alloc-timeline-track:before{content:"";position:absolute;left:25%;top:0;bottom:0;border-left:1px dashed rgba(121,137,161,.28);box-shadow:calc(25vw) 0 0 rgba(0,0,0,0);}
+      .alloc-timeline-bar{position:absolute;top:5px;bottom:5px;border-radius:999px;display:flex;align-items:center;justify-content:center;min-width:54px;color:#FFFFFF;font-size:10.5px;font-weight:900;box-shadow:0 8px 18px rgba(22,35,61,.12);}
+      .alloc-timeline-bar.teal{background:linear-gradient(90deg,#28C4A6,#35D2C8);}
+      .alloc-timeline-bar.success{background:linear-gradient(90deg,#3EC775,#2BB06A);}
+      .alloc-timeline-bar.amber{background:linear-gradient(90deg,#F5A83C,#F7C64C);color:#332300;}
+      .alloc-timeline-bar.danger{background:linear-gradient(90deg,#F15B71,#F87486);}
+      .alloc-timeline-today{position:absolute;top:0;bottom:0;width:2px;background:#E45368;z-index:2;}
+      .alloc-timeline-due{justify-self:end;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:900;white-space:nowrap;}
+      .alloc-timeline-due.teal,.alloc-timeline-due.success{background:rgba(40,196,166,.12);color:#15987F;}
+      .alloc-timeline-due.amber{background:rgba(245,168,60,.16);color:#B57410;}
+      .alloc-timeline-due.danger{background:rgba(241,91,113,.15);color:#D9435A;}
       .allocation-filter-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;box-shadow:0 4px 14px rgba(22,35,61,.05);}
       .allocation-search{margin-bottom:12px;max-width:none;}
       .allocation-filter-grid{display:grid;grid-template-columns:repeat(7,minmax(130px,1fr));gap:10px;align-items:end;}
@@ -6519,8 +6624,8 @@ function GlobalStyle() {
       @media (max-width:1500px){.exec-inventory-grid{grid-template-columns:1fr;}.donut-pair-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.compact-donut-wrap{grid-template-columns:180px 1fr;grid-template-rows:auto;justify-items:stretch;min-height:220px;}.exec-service-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.backlog-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
       @media (max-width:1280px){.cs-dashboard-panel .grid.g4{grid-template-columns:repeat(2,minmax(0,1fr));}}
       @media (max-width:1100px){.exec-kpi-grid,.exec-main-grid,.exec-bottom-grid{grid-template-columns:1fr 1fr;}.warehouse-status-body{grid-template-columns:1fr;}.warehouse-metrics{grid-template-columns:1fr 1fr 1fr;}.inventory-donut-wrap{flex-direction:column;align-items:flex-start;}.sales-matrix{grid-template-columns:130px repeat(3,minmax(120px,1fr)) 120px;}.topbar{height:auto;min-height:60px;padding:10px 16px;align-items:flex-start;}.topbar-right{flex-wrap:wrap;justify-content:flex-end;gap:8px;}}
-      @media (max-width:1300px){.allocation-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
-      @media (max-width:900px){.allocation-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-progress-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-event{grid-template-columns:1fr;gap:2px;}.console-hero{flex-direction:column;align-items:stretch;}.console-pack-target{min-width:0;}}
+      @media (max-width:1300px){.allocation-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.alloc-control-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}}
+      @media (max-width:900px){.alloc-control-hero{flex-direction:column;align-items:stretch;}.alloc-control-kpis{grid-template-columns:1fr;}.alloc-timeline-panel{overflow-x:auto;}.alloc-timeline-axis,.alloc-timeline-row{min-width:780px;}.allocation-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-progress-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-event{grid-template-columns:1fr;gap:2px;}.console-hero{flex-direction:column;align-items:stretch;}.console-pack-target{min-width:0;}}
       @media (max-width:760px){.exec-kpi-grid,.exec-main-grid,.exec-bottom-grid,.exec-inventory-grid,.donut-pair-grid,.exec-service-grid,.warehouse-metrics,.backlog-grid,.sales-matrix{grid-template-columns:1fr;}.backlog-head{flex-direction:column;}.backlog-total{text-align:left;width:100%;}.category-wrap{flex-direction:column;align-items:flex-start;}.inventory-donut-wrap{flex-direction:row;align-items:center;flex-wrap:wrap;}.compact-donut-wrap{grid-template-columns:1fr;justify-items:center;min-height:auto;}.inventory-pill{flex:1 1 130px;}.cs-dashboard-panel .grid.g4{grid-template-columns:1fr;}}
 
       @media print{
