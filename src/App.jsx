@@ -477,9 +477,10 @@ const NAV_GROUPS = [
     header: "Inventory", items: [
       { id: "inventory", label: "1. Inventory Transaction", icon: Boxes },
       { id: "cyclecount", label: "2. Cycle Count", icon: ClipboardCheck },
-      { id: "invhold", label: "3. Inventory Overview", icon: Boxes },
-      { id: "aging", label: "4. Aging", icon: Clock },
-      { id: "cover", label: "5. Stock Cover Day", icon: TrendingUp },
+      { id: "register", label: "3. Inventory Register", icon: PackageSearch },
+      { id: "invhold", label: "4. Inventory Overview", icon: Boxes },
+      { id: "aging", label: "5. Aging", icon: Clock },
+      { id: "cover", label: "6. Stock Cover Day", icon: TrendingUp },
     ]
   },
   {
@@ -1114,6 +1115,7 @@ export default function App() {
             {view === "putaway" && <PutawayMove {...ctx} />}
             {view === "inventory" && <InventoryTransaction {...ctx} />}
             {view === "cyclecount" && <CycleCount {...ctx} />}
+            {view === "register" && <InventoryRegister stock={stock} />}
             {view === "replenishment" && <Replenishment {...ctx} />}
             {view === "allocation" && <AllocationOrder {...ctx} />}
             {view === "picking" && <Picking />}
@@ -1127,7 +1129,7 @@ export default function App() {
             {view === "cs" && <CustomerService {...ctx} />}
             {view === "warehouse3d" && <Warehouse3D stock={stock} />}
             {view === "invhold" && <InventoryHoldOverview {...ctx} />}
-            {view === "aging" && <AgingReport stock={stock} />}
+            {view === "aging" && <AgingReport {...ctx} />}
             {view === "cover" && <StockCover stock={stock} />}
             {view === "recall" && <TotalRecall stock={stock} />}
             {view === "recallprework" && <TotalRecallPrework stickerTasks={stickerTasks} stickerStock={stickerStock} />}
@@ -2127,6 +2129,249 @@ function TotalOutboundSummary({ platformOrders }) {
 /* MASTER DATA                                                          */
 /* ================================================================== */
 
+function productAvatarStyle(item) {
+  const seed = String(item?.brand || item?.name || item?.id || "P").split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const palettes = [
+    ["#EAF4FF", "#3E7EE0"],
+    ["#EAF8F0", "#28C4A6"],
+    ["#FFF6DF", "#F5A83C"],
+    ["#FDECEF", "#F15B71"],
+    ["#F1EEFF", "#8B5CF6"],
+  ];
+  const p = palettes[seed % palettes.length];
+  return { background: `linear-gradient(135deg, ${p[0]}, #FFFFFF)`, color: p[1], borderColor: p[0] };
+}
+
+function registerRowFromItem(item) {
+  const size = sizeGroupOf(item);
+  const ageRule = receivingAgeRuleOf(item);
+  return {
+    key: item.id,
+    item,
+    synnexId: item.id,
+    itemCode: item.itemCode,
+    name: item.name,
+    brand: item.brand,
+    partNo: item.partNo,
+    group: item.abc || "-",
+    sizeCode: size.code,
+    lpn: "-",
+    lot: "-",
+    location: item.storage || "-",
+    floor: "Master",
+    qty: item.dailySales || 0,
+    ageDays: ageRule.maxAgeDays,
+    ageLabel: `${ageRule.minAgeDays}-${ageRule.maxAgeDays} days`,
+    sticker: item.stickerRequired ? "Sticker Required" : "No Sticker",
+    status: item.stickerRequired ? "AVL" : "N/A",
+    util: Math.min(100, Math.max(8, Number(item.dailySales || 0))),
+    sub: item.partNo,
+  };
+}
+
+function registerRowFromInventory(row) {
+  return {
+    key: row.key || `${row.lpn}-${row.itemId}-${row.loc}`,
+    item: row.item,
+    synnexId: row.itemId,
+    itemCode: row.item?.itemCode || row.itemId,
+    name: row.item?.name || "-",
+    brand: row.item?.brand || "-",
+    partNo: row.item?.partNo || "-",
+    group: row.item?.abc || "-",
+    sizeCode: row.sizeCode,
+    lpn: row.lpn || "-",
+    lot: row.batch || "-",
+    location: row.loc,
+    floor: row.floorName,
+    qty: Number(row.qty || 0),
+    ageDays: Number(row.days || row.age || 0),
+    ageLabel: `${Number(row.days || row.age || 0)} days`,
+    sticker: row.sticker?.label || stickerStateOfStock(row).label,
+    status: row.status || "AVL",
+    util: Number(row.util || 0),
+    sub: `${row.lpn || "-"} · ${row.batch || "-"}`,
+  };
+}
+
+function ProductRegisterBoard({ title = "Inventory Register", subtitle = "", rows = [], variant = "stock", onPrimary, onRowClick }) {
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [groupFilter, setGroupFilter] = useState("ALL");
+  const groups = [...new Set(rows.map((r) => r.group).filter(Boolean))].sort();
+  const filtered = rows.filter((r) => {
+    const hay = `${r.synnexId} ${r.itemCode} ${r.name} ${r.brand} ${r.partNo} ${r.lpn} ${r.lot} ${r.location} ${r.sizeCode}`.toLowerCase();
+    return (!q || hay.includes(q.toLowerCase()))
+      && (statusFilter === "ALL" || r.status === statusFilter)
+      && (groupFilter === "ALL" || r.group === groupFilter);
+  });
+  const totalQty = rows.reduce((a, r) => a + Number(r.qty || 0), 0);
+  const statusCounts = [
+    { code: "ALL", label: "All", count: rows.length, tone: "blue" },
+    { code: "AVL", label: "Available", count: rows.filter((r) => r.status === "AVL").length, tone: "green" },
+    { code: "HOLD", label: "Hold", count: rows.filter((r) => r.status === "HOLD").length, tone: "amber" },
+    { code: "QC", label: "QC", count: rows.filter((r) => r.status === "QC").length, tone: "violet" },
+    { code: "DMG", label: "Damage", count: rows.filter((r) => r.status === "DMG").length, tone: "red" },
+  ];
+  return (
+    <div className="asset-register-shell">
+      <div className="asset-register-head">
+        <div className="asset-title-wrap">
+          <div className="asset-title-icon"><PackageSearch size={23} /></div>
+          <div><h2>{title}</h2><p>{subtitle || `${rows.length} records · ${totalQty.toLocaleString()} units`}</p></div>
+        </div>
+        <div className="asset-actions">
+          {onPrimary && <button className="btn primary" onClick={onPrimary}><PlusCircle size={14} /> Add New Item</button>}
+          <button className="btn secondary"><ScanLine size={13} /> Print QR</button>
+          <button className="btn secondary"><FileText size={13} /> Export Excel</button>
+          <button className="btn secondary"><Printer size={13} /> Export PDF</button>
+        </div>
+      </div>
+      <div className="asset-status-row">
+        {statusCounts.map((s) => <button key={s.code} className={`asset-filter-chip ${s.tone} ${statusFilter === s.code ? "active" : ""}`} onClick={() => setStatusFilter(s.code)}><i />{s.label}<b>{s.count}</b></button>)}
+      </div>
+      <div className="asset-status-row compact">
+        <button className={`asset-filter-chip blue ${groupFilter === "ALL" ? "active" : ""}`} onClick={() => setGroupFilter("ALL")}>All Groups<b>{rows.length}</b></button>
+        {groups.map((g) => <button key={g} className={`asset-filter-chip ${groupFilter === g ? "active" : ""}`} onClick={() => setGroupFilter(g)}>{variant === "item" ? "ABC" : "Group"} {g}<b>{rows.filter((r) => r.group === g).length}</b></button>)}
+      </div>
+      <div className="asset-table-panel">
+        <div className="asset-table-toolbar">
+          <div className="search-box"><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search SYNNEX ID, item name, brand, LPN, lot, location..." /></div>
+          <div className="asset-view-toggle"><button className="active"><LayoutGrid size={13} /> Table</button><button><Boxes size={13} /> Card</button></div>
+        </div>
+        <div className="table-wrap asset-table-wrap">
+          <table>
+            <thead><tr><th>Product</th><th>ABC</th><th>Size</th><th>Sticker</th><th>LPN</th><th>Lot</th><th>Location</th><th>Qty</th><th>Aging / Rule</th><th>Status</th><th>Utilization</th><th>Action</th></tr></thead>
+            <tbody>
+              {filtered.map((r) => {
+                const age = ageBucket(r.ageDays || 0);
+                return (
+                  <tr key={r.key} className={onRowClick ? "clickable" : ""} onClick={() => onRowClick?.(r)}>
+                    <td><div className="asset-product-cell"><div className="asset-thumb" style={productAvatarStyle(r.item)}><Package size={18} /></div><div><b>{r.name}</b><span className="mono">{r.synnexId}</span><em>{r.brand} · {r.partNo}</em></div></div></td>
+                    <td><span className={`badge ${r.group}`}>{r.group}</span></td>
+                    <td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td>
+                    <td><span className={`scan-step ${String(r.sticker).includes("ติดแล้ว") || String(r.sticker).includes("No") ? "done" : "active"}`}>{r.sticker}</span></td>
+                    <td className="mono">{r.lpn}</td>
+                    <td className="mono">{r.lot}</td>
+                    <td><b className="mono">{r.location}</b><div className="kpi-sub">{r.floor}</div></td>
+                    <td className="mono">{Number(r.qty || 0).toLocaleString()}</td>
+                    <td><span className={`age-chip ${age.cls}`}>{r.ageLabel}</span></td>
+                    <td><StatusBadge code={r.status === "N/A" ? "AVL" : r.status} /></td>
+                    <td>{utilizationBar(r.util, `age-${age.cls === "ok" ? "ok" : age.cls === "warn" ? "warn" : "risk"}`)}</td>
+                    <td><div className="asset-row-actions"><button onClick={(e) => { e.stopPropagation(); onRowClick?.(r); }}><Search size={13} /></button><button onClick={(e) => e.stopPropagation()}><Edit3 size={13} /></button><button onClick={(e) => { e.stopPropagation(); onRowClick?.(r); }}><ChevronRight size={13} /></button></div></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InventoryRegister({ stock = [] }) {
+  const rows = inventoryRowsOf(stock).map(registerRowFromInventory);
+  return <><div className="section-title">Inventory Register</div><ProductRegisterBoard title="Inventory Register" subtitle={`${rows.length} LPN / location records · searchable product register view`} rows={rows} /></>;
+}
+
+function ItemDetailExperience({ item, onClose, onEdit }) {
+  const [tab, setTab] = useState("overview");
+  const size = sizeGroupOf(item);
+  const ageRule = receivingAgeRuleOf(item);
+  const actions = [
+    { label: "Set Location Rule", icon: MapPinned, tone: "blue" },
+    { label: "Set Owner / Brand", icon: Users, tone: "violet" },
+    { label: "Borrow / Reservation", icon: ShoppingBag, tone: "indigo" },
+    { label: "Report Issue", icon: Settings2, tone: "red" },
+    { label: "Receiving Rule", icon: AlertTriangle, tone: "orange" },
+    { label: "Edit", icon: Edit3, tone: "purple", onClick: onEdit },
+    { label: "Prework Setup", icon: Tags, tone: "slate" },
+    { label: "Print QR", icon: LayoutGrid, tone: "navy" },
+    { label: "View History", icon: RefreshCw, tone: "teal" },
+    { label: "Audit Log", icon: ShieldCheck, tone: "yellow" },
+  ];
+  const detailRows = [
+    ["SYNNEX ID", item.id],
+    ["Item ID", item.itemCode],
+    ["Part ID", item.partId],
+    ["Part No.", item.partNo],
+    ["Brand", item.brand],
+    ["Item Name", item.name],
+    ["ABC Class", item.abc],
+    ["Storage Type", item.storage],
+    ["Size Group", `${size.code} · ${size.name}`],
+    ["Dimension", `${item.dim?.l || 0} x ${item.dim?.w || 0} x ${item.dim?.h || 0} cm`],
+    ["Weight", `${item.dim?.wt || 0} kg`],
+    ["TixHi", item.tixHi || "-"],
+    ["Receiving Age Rule", `${ageRule.minAgeDays}-${ageRule.maxAgeDays} days`],
+    ["Sticker Required", item.stickerRequired ? "Required" : "Not required"],
+    ["Sticker Size", stickerSizeForItem(item)],
+    ["Prework Required", preworkRequiredOf(item) ? "Required" : "Not required"],
+    ["Bypass to Prework", bypassPreworkAllowedOf(item) ? "Allowed" : "Not allowed"],
+    ["Next After Prework", nextDestinationAfterPreworkOf(item)],
+  ];
+  return (
+    <Modal onClose={onClose} width={1480}>
+      <div className="asset-detail-page">
+        <div className="asset-detail-top">
+          <div>
+            <button className="link-btn asset-back" onClick={onClose}><ArrowRight size={14} style={{ transform: "rotate(180deg)" }} /> Back to Item Master</button>
+            <h2>{item.name} <span className="scan-step done">Active</span></h2>
+            <p><span className="mono">{item.id}</span> · {item.abc} Class · {item.brand} · Part No. <span className="mono">{item.partNo}</span></p>
+          </div>
+          <div className="asset-detail-actions">
+            <button className="btn secondary" onClick={onEdit}><Edit3 size={13} /> Edit</button>
+            <button className="btn secondary"><Printer size={13} /> Print QR</button>
+            <button className="btn primary"><Sparkles size={13} /> Action</button>
+          </div>
+        </div>
+        <div className="asset-detail-grid">
+          <div className="asset-detail-left">
+            <div className="asset-photo-card">
+              <span className="scan-step done">Active</span>
+              <div className="asset-product-visual" style={productAvatarStyle(item)}>
+                <PackageSearch size={76} />
+                <b>{item.brand}</b>
+                <em>{size.code} Size</em>
+              </div>
+              <div className="asset-photo-count"><ImagePlus size={13} /> 3/4</div>
+            </div>
+            <div className="asset-thumb-row">
+              {[item.brand, size.code, item.abc].map((v, i) => <div key={i} className={`asset-detail-thumb ${i === 0 ? "active" : ""}`} style={productAvatarStyle(item)}><Package size={22} /><span>{v}</span></div>)}
+              <div className="asset-detail-thumb more">+1</div>
+            </div>
+            <div className="asset-qr-card">
+              <div className="fake-qr"><i /><i /><i /><span>{item.id}</span></div>
+              <b className="mono">{item.id}</b>
+              <p>Scan to open item master / stock detail</p>
+              <button className="btn secondary"><Printer size={13} /> Print QR Label</button>
+            </div>
+          </div>
+          <div className="asset-detail-right">
+            <div className="asset-quick-panel">
+              <div className="asset-panel-title"><Sparkles size={15} /> Quick Actions</div>
+              <div className="asset-action-grid">
+                {actions.map(({ label, icon: Icon, tone, onClick }) => <button key={label} className={`asset-action ${tone}`} onClick={onClick}><span><Icon size={22} /></span>{label}</button>)}
+              </div>
+            </div>
+            <div className="asset-info-panel">
+              <div className="asset-detail-tabs">
+                {[["overview", "Overview", Database], ["finance", "Cost & Storage", Gauge], ["location", "Location & Rule", MapPinned], ["history", "History", RefreshCw], ["audit", "Audit Log", ShieldCheck]].map(([id, label, Icon]) => <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}><Icon size={14} />{label}</button>)}
+              </div>
+              {tab === "overview" && <div className="asset-detail-list">{detailRows.map(([k, v]) => <div key={k}><span>{k}</span><b>{v}</b></div>)}</div>}
+              {tab === "finance" && <div className="asset-detail-list"><div><span>Daily Sales</span><b>{item.dailySales || 0} units/day</b></div><div><span>Storage Cost Policy</span><b>{item.storage || "-"} · use slotting recommendation</b></div><div><span>Pack / Pallet</span><b>{item.pack?.piecePerPallet || 0} pcs</b></div><div><span>Pack / Basket</span><b>{item.pack?.piecePerBasket || 0} pcs</b></div></div>}
+              {tab === "location" && <div className="asset-detail-list"><div><span>Default Storage</span><b>{item.storage}</b></div><div><span>Next after Prework</span><b className="mono">{nextDestinationAfterPreworkOf(item)}</b></div><div><span>Bypass Prework</span><b>{bypassPreworkAllowedOf(item) ? "Allowed" : "Not allowed"}</b></div><div><span>Size Rule</span><b>{size.code} · {size.maxL}x{size.maxW}x{size.maxH} cm</b></div></div>}
+              {tab === "history" && <div className="asset-history-list"><div><b>Created Item Master</b><span>System · 2569-07-01 08:00</span></div><div><b>Updated receiving age rule</b><span>Warehouse Supervisor · 2569-07-10 10:30</span></div><div><b>Mapped sticker size {stickerSizeForItem(item)}</b><span>Prework Admin · 2569-07-12 14:20</span></div></div>}
+              {tab === "audit" && <div className="asset-history-list"><div><b>Audit: Master data reviewed</b><span>AI Engine · Passed</span></div><div><b>Audit: SYNNEX ID format</b><span className="mono">{item.id} · Valid</span></div></div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function MasterData() {
   const [tab, setTab] = useState("item");
   const [q, setQ] = useState("");
@@ -2141,6 +2386,7 @@ function MasterData() {
   const bump = () => setRev((r) => r + 1);
 
   const filtered = ITEMS.filter((it) => (it.name + it.id + it.itemCode + it.partId + it.partNo + it.brand).toLowerCase().includes(q.toLowerCase()));
+  const openNewItemModal = () => setItemModal({ id: "", partId: "", itemCode: "", brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, preworkRequired: true, bypassPreworkAllowed: true, defaultPreworkFlow: "Sticker / VAS ��͹���", nextAfterPrework: "MZ-01-01-A", receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 });
 
   const saveItem = (form) => {
     const clean = {
@@ -2184,6 +2430,7 @@ function MasterData() {
 
       {tab === "item" && (
         <>
+          <ProductRegisterBoard title="Item Register" subtitle={`${filtered.length} master items · Data Master Item with QR / export style register`} rows={filtered.map(registerRowFromItem)} variant="item" onPrimary={openNewItemModal} onRowClick={(r) => setDetail(r.item)} />
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
             <div className="search-box" style={{ marginBottom: 0 }}><Search size={15} color="var(--muted)" /><input placeholder="ค้นหา SYNNEX ID / Item ID / Part ID / Part No / Brand / ชื่อสินค้า…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
             <button className="btn" onClick={() => setItemModal({ id: "", partId: "", itemCode: "", brand: "", partNo: "", name: "", abc: "A", storage: "Rack", tixHi: "", stickerRequired: true, preworkRequired: true, bypassPreworkAllowed: true, defaultPreworkFlow: "Sticker / VAS ก่อนขาย", nextAfterPrework: "MZ-01-01-A", receiveMinAgeDays: 0, receiveMaxAgeDays: 3650, dim: { l: 0, w: 0, h: 0, wt: 0 }, pack: { boxPerPallet: 0, piecePerPallet: 0, boxPerBasket: 0, piecePerBasket: 0 }, dailySales: 0 })}><PlusCircle size={13} /> เพิ่มสินค้าใหม่</button>
@@ -2301,7 +2548,8 @@ function MasterData() {
         </>
       )}
 
-      {detail && (
+      {detail && <ItemDetailExperience item={detail} onClose={() => setDetail(null)} onEdit={() => setItemModal({ ...detail, _editing: true })} />}
+      {false && detail && (
         <Modal onClose={() => setDetail(null)} width={520}>
           <h2>{detail.name}</h2>
           <div className="kpi-sub" style={{ marginBottom: 14 }}>SYNNEX ID {detail.id} · Item ID {detail.itemCode} · Part ID {detail.partId} · Part No. {detail.partNo} · Brand {detail.brand}</div>
@@ -5379,6 +5627,7 @@ function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => 
   return (
     <>
       <div className="section-title">Inventory Overview</div>
+      <ProductRegisterBoard title="Inventory Overview Register" subtitle={`${rows.length} LPN records · status, sticker, location, size, utilization`} rows={rows.map(registerRowFromInventory)} />
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="grid g4">
           <div className="field"><label>SYNNEX ID</label><input value={filters.item} onChange={(e) => setF("item", e.target.value)} /></div>
@@ -5400,16 +5649,71 @@ function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => 
   );
 }
 
-function AgingReport({ stock = [] }) {
+function AgingLpnDetail({ row, projects = [], onClose, onUnallocate, onForce }) {
+  const age = ageBucket(row.days || 0);
+  return (
+    <Modal onClose={onClose} width={980}>
+      <div className="aging-detail-head">
+        <div><h2>Aging Detail · <span className="mono">{row.lpn || "-"}</span></h2><p>{row.item?.name || "-"} · <span className="mono">{row.itemId}</span> · Lot <span className="mono">{row.batch || "-"}</span></p></div>
+        <span className={`age-chip ${age.cls}`}>{row.days} days</span>
+      </div>
+      <div className="allocation-progress-strip">
+        <div><span>LPN</span><b className="mono">{row.lpn || "-"}</b></div>
+        <div><span>Location</span><b className="mono">{row.loc}</b></div>
+        <div><span>Qty</span><b>{Number(row.qty || 0).toLocaleString()}</b></div>
+        <div><span>Status</span><b>{row.status || "AVL"}</b></div>
+        <div><span>Sticker</span><b>{row.sticker?.label || "-"}</b></div>
+      </div>
+      <div className="aging-project-panel">
+        <h3>Project / Order Allocation linked to this LPN</h3>
+        <div className="table-wrap">
+          <table><thead><tr><th>Order / Project</th><th>Customer</th><th>Priority</th><th>Status</th><th>Location</th><th>LPN</th><th>Allocated Qty</th><th>Picked</th><th>System</th></tr></thead><tbody>
+            {(projects.length ? projects : [{ order: { id: "No active allocation", customer: "-", priority: "-", status: row.status || "AVL" }, source: { loc: row.loc, lpn: row.lpn, qty: 0, pickedQty: 0, system: locOf(row.loc)?.system || "Manual" } }]).map((p, idx) => (
+              <tr key={`${p.order.id}-${idx}`}><td className="mono">{p.order.id}</td><td>{p.order.customer || "-"}</td><td>{p.order.priority || "-"}</td><td><OrderStatusPill status={p.order.status || "-"} /></td><td className="mono">{p.source.loc}</td><td className="mono">{p.source.lpn || "-"}</td><td>{Number(p.source.qty || 0).toLocaleString()}</td><td>{Number(p.source.pickedQty || 0).toLocaleString()}</td><td>{p.source.system || "Manual"}</td></tr>
+            ))}
+          </tbody></table>
+        </div>
+      </div>
+      <div className="aging-detail-actions">
+        <button className="btn secondary" disabled={!projects.length && row.status !== "ALLOC"} onClick={onUnallocate}><Unlock size={13} /> Un-Allocate LPN</button>
+        <button className="btn" onClick={onForce}><Send size={13} /> Force Allocate / Pick / Pack</button>
+      </div>
+    </Modal>
+  );
+}
+
+function AgingReport({ stock = [], setStock = () => {}, allocOrders = [], setAllocOrders = () => {}, addTx = () => {}, notify = () => {}, confirmAction = ({ onConfirm }) => onConfirm?.(), userSession }) {
   const [q, setQ] = useState("");
+  const [detail, setDetail] = useState(null);
   const rows = inventoryRowsOf(stock).filter((r) => `${r.lpn} ${r.itemId} ${r.item?.name} ${r.loc} ${r.batch} ${r.sizeCode} ${r.floorName}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => b.days - a.days);
-  return <><div className="section-title">Aging</div><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา วัน/เดือน/ปี, SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Floor</th><th>Qty</th><th>Aging Days</th><th>Status</th><th>Utilization</th></tr></thead><tbody>{rows.map((r) => { const age = ageBucket(r.days); return <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{r.batch || "-"}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><span className={`age-chip ${age.cls}`}>{r.days} วัน</span></td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util, `age-${age.cls === "ok" ? "ok" : age.cls === "warn" ? "warn" : "risk"}`)}</td></tr>; })}</tbody></table></div></>;
+  const allocatedProjectsOf = (row) => allocOrders.flatMap((o) => (o.lines || []).flatMap((l) => (l.sources || []).filter((s) => l.itemId === row.itemId && (s.lpn === row.lpn || s.loc === row.loc)).map((s) => ({ order: o, line: l, source: s })))).concat(
+    stock.filter((s) => s.itemId === row.itemId && s.lpn === row.lpn && s.allocatedFor).map((s) => ({ order: allocOrders.find((o) => o.id === s.allocatedFor) || { id: s.allocatedFor, customer: "Project / Reserved", priority: "Project", status: "Allocated" }, line: { itemId: s.itemId, qty: s.qty }, source: { loc: s.loc, lpn: s.lpn, qty: s.qty, system: locOf(s.loc)?.system || "Manual" } }))
+  );
+  const unallocateLpn = (row) => {
+    const projects = allocatedProjectsOf(row);
+    const orderIds = [...new Set(projects.map((p) => p.order.id).filter(Boolean))];
+    setStock((list) => list.map((s) => (s.lpn === row.lpn && s.itemId === row.itemId && s.status === "ALLOC" ? { ...s, status: "AVL", allocatedFor: undefined } : s)));
+    setAllocOrders((list) => list.map((o) => orderIds.includes(o.id) ? { ...o, status: "Pending", lines: (o.lines || []).map((l) => ({ ...l, sources: (l.sources || []).filter((src) => !(l.itemId === row.itemId && (src.lpn === row.lpn || src.loc === row.loc))) })), orderEvents: [...(o.orderEvents || []), { t: new Date().toISOString(), type: "Aging Un-Allocate", detail: `Release aging LPN ${row.lpn}` }] } : o));
+    addTx({ type: "Aging Un-Allocate", detail: `${row.lpn}: ปลด Allocate เพื่อบริหาร Aging`, itemId: row.itemId, lpn: row.lpn, loc: row.loc, user: userSession?.user || "system" });
+    notify("ปลด Allocate แล้ว", `${row.lpn} พร้อมนำไปจัดสรรใหม่`, "success");
+    setDetail(null);
+  };
+  const forceFulfill = (row) => {
+    const project = allocatedProjectsOf(row)[0];
+    const orderId = project?.order?.id || `FORCE-${row.lpn || row.key}`;
+    setStock((list) => list.map((s) => (s.lpn === row.lpn && s.itemId === row.itemId ? { ...s, status: "PACKED", loc: "PICK-PACK", allocatedFor: orderId } : s)));
+    setAllocOrders((list) => list.map((o) => o.id === orderId ? { ...o, status: "Packed", lines: (o.lines?.length ? o.lines : orderLinesOf(o)).map((l) => l.itemId === row.itemId ? { ...l, sources: [{ loc: row.loc, lpn: row.lpn, qty: Math.min(row.qty, l.qty || row.qty), pickedQty: Math.min(row.qty, l.qty || row.qty), system: locOf(row.loc)?.system || "Manual", released: true, forceAging: true }] } : l), orderEvents: [...(o.orderEvents || []), { t: new Date().toISOString(), type: "Force Aging Fulfillment", detail: `Force Pick/Pack aging LPN ${row.lpn}` }] } : o));
+    addTx({ type: "Force Aging Pick Pack", detail: `${orderId}: Force Allocate/Pick/Pack ${row.lpn} จาก Aging Detail`, itemId: row.itemId, lpn: row.lpn, fromLoc: row.loc, toLoc: "PICK-PACK", loc: "PICK-PACK", qty: row.qty, user: userSession?.user || "system" });
+    notify("Force Pick/Pack แล้ว", `${row.lpn} ถูกส่งเข้า Pick-Pack เพื่อจ่ายก่อนหมดอายุ`, "success");
+    setDetail(null);
+  };
+  return <><div className="section-title">Aging</div><ProductRegisterBoard title="Aging Register" subtitle={`${rows.length} aging records · lot, receiving age, status and utilization`} rows={rows.map(registerRowFromInventory)} onRowClick={(r) => setDetail(rows.find((x) => x.key === r.key) || rows.find((x) => x.lpn === r.lpn && x.itemId === r.synnexId))} /><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา วัน/เดือน/ปี, SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Floor</th><th>Qty</th><th>Aging Days</th><th>Status</th><th>Utilization</th><th></th></tr></thead><tbody>{rows.map((r) => { const age = ageBucket(r.days); return <tr className="clickable" key={r.key || `${r.loc}-${r.itemId}`} onClick={() => setDetail(r)}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{r.batch || "-"}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><span className={`age-chip ${age.cls}`}>{r.days} วัน</span></td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util, `age-${age.cls === "ok" ? "ok" : age.cls === "warn" ? "warn" : "risk"}`)}</td><td><button className="btn secondary" onClick={(e) => { e.stopPropagation(); setDetail(r); }}><Search size={12} /> Detail</button></td></tr>; })}</tbody></table></div>{detail && <AgingLpnDetail row={detail} projects={allocatedProjectsOf(detail)} onClose={() => setDetail(null)} onUnallocate={() => confirmAction({ title: "ปลด Allocate จาก Aging", message: `ปลดการจอง ${detail.lpn || detail.itemId} เพื่อเอาไปจัดสรรใหม่หรือไม่`, onConfirm: () => unallocateLpn(detail) })} onForce={() => confirmAction({ title: "Force Allocate / Pick / Pack", message: `บังคับนำ ${detail.lpn || detail.itemId} ไป Pick-Pack เพื่อจ่ายก่อน Aging เสี่ยงหรือไม่`, onConfirm: () => forceFulfill(detail) })} />}</>;
 }
 
 function StockCover({ stock = [] }) {
   const [q, setQ] = useState("");
   const rows = inventoryRowsOf(stock).map((r) => { const daily = Math.max(1, r.item?.dailySales || 10); return { ...r, daily, cover: Number(r.qty || 0) / daily }; }).filter((r) => `${r.lpn} ${r.itemId} ${r.item?.name} ${r.loc} ${r.batch} ${r.sizeCode} ${r.floorName}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => a.cover - b.cover);
-  return <><div className="section-title">Stock Cover Day</div><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Location</th><th>Floor</th><th>Stock</th><th>Daily Sales</th><th>Cover Day</th><th>Status</th><th>Utilization</th></tr></thead><tbody>{rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td>{r.daily}</td><td style={{ color: r.cover < 7 ? "var(--danger)" : r.cover < 14 ? "var(--amber)" : "var(--teal)", fontWeight: 800 }}>{r.cover.toFixed(1)}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}</td></tr>)}</tbody></table></div></>;
+  return <><div className="section-title">Stock Cover Day</div><ProductRegisterBoard title="Stock Cover Register" subtitle={`${rows.length} cover records · demand speed, stock and location view`} rows={rows.map(registerRowFromInventory)} /><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Location</th><th>Floor</th><th>Stock</th><th>Daily Sales</th><th>Cover Day</th><th>Status</th><th>Utilization</th></tr></thead><tbody>{rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td>{r.daily}</td><td style={{ color: r.cover < 7 ? "var(--danger)" : r.cover < 14 ? "var(--amber)" : "var(--teal)", fontWeight: 800 }}>{r.cover.toFixed(1)}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}</td></tr>)}</tbody></table></div></>;
 }
 
 function genRecall(currentQty) { const received = [{ ref: "PO-256907-101", date: "2569-07-01", qty: currentQty + 120 }, { ref: "PO-256907-142", date: "2569-07-05", qty: 80 }]; const issued = [{ ref: "SO-88210", date: "2569-07-07", qty: 100 }, { ref: "SO-88291", date: "2569-07-08", qty: 100 }]; return { received, issued, totalReceived: received.reduce((a, r) => a + r.qty, 0), totalIssued: issued.reduce((a, r) => a + r.qty, 0) }; }
@@ -6208,6 +6512,84 @@ function GlobalStyle() {
       .util-line{height:8px;border-radius:999px;background:var(--panel-raised);border:1px solid var(--border);overflow:hidden;margin:10px 0;}
       .util-line i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--success),var(--amber),var(--teal));}
       .priority-pill{display:inline-flex;align-items:center;justify-content:center;min-width:42px;border-radius:999px;padding:4px 9px;font-family:'JetBrains Mono';font-weight:900;font-size:11px;}
+      .asset-register-shell{margin:14px 0 18px;}
+      .asset-register-head{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px;}
+      .asset-title-wrap{display:flex;align-items:center;gap:14px;}
+      .asset-title-icon{width:50px;height:50px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(135deg,#2BB4F6,#2F67FF);color:#FFFFFF;box-shadow:0 14px 26px rgba(47,103,255,.22);}
+      .asset-title-wrap h2{font-family:'Space Grotesk';font-size:24px;line-height:1;margin:0;color:#17213A;letter-spacing:0;}
+      .asset-title-wrap p{margin:7px 0 0;color:#637089;font-size:12.5px;font-weight:700;}
+      .asset-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+      .asset-status-row{display:flex;gap:9px;flex-wrap:wrap;margin:10px 0;}
+      .asset-status-row.compact{margin-top:0;}
+      .asset-filter-chip{border:1px solid #DDE6F2;background:#FFFFFF;color:#25314F;border-radius:13px;padding:9px 13px;display:inline-flex;align-items:center;gap:8px;font-family:'Sarabun';font-size:12px;font-weight:900;cursor:pointer;box-shadow:0 6px 16px rgba(22,35,61,.04);}
+      .asset-filter-chip i{width:8px;height:8px;border-radius:50%;background:#7B879C;}
+      .asset-filter-chip b{font-family:'Space Grotesk';font-size:14px;color:#17213A;margin-left:2px;}
+      .asset-filter-chip.active{border-color:#2F67FF;box-shadow:0 0 0 2px rgba(47,103,255,.08),0 8px 18px rgba(22,35,61,.06);}
+      .asset-filter-chip.blue i{background:#2F67FF}.asset-filter-chip.green i{background:#20C766}.asset-filter-chip.amber i{background:#FFAA1F}.asset-filter-chip.violet i{background:#9B6FD1}.asset-filter-chip.red i{background:#FF3D62}
+      .asset-table-panel{background:#FFFFFF;border:1px solid #E2EAF4;border-radius:18px;padding:18px 20px;box-shadow:0 16px 36px rgba(31,41,55,.07);}
+      .asset-table-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;}
+      .asset-table-toolbar .search-box{margin:0;max-width:420px;}
+      .asset-view-toggle{display:flex;background:#F3F7FC;border:1px solid #DDE6F2;border-radius:12px;padding:4px;gap:4px;}
+      .asset-view-toggle button{border:0;background:transparent;color:#637089;border-radius:9px;padding:7px 10px;display:flex;align-items:center;gap:6px;font-family:'Sarabun';font-size:12px;font-weight:900;cursor:pointer;}
+      .asset-view-toggle button.active{background:#FFFFFF;color:#2F67FF;box-shadow:0 4px 12px rgba(22,35,61,.08);}
+      .asset-table-wrap{border-radius:14px;border:1px solid #E2EAF4;overflow:auto;}
+      .asset-product-cell{display:flex;align-items:center;gap:12px;min-width:280px;}
+      .asset-thumb{width:42px;height:42px;border-radius:12px;border:1px solid #E2EAF4;display:grid;place-items:center;flex-shrink:0;}
+      .asset-product-cell b{display:block;color:#17213A;font-size:12.5px;font-weight:900;line-height:1.25;}
+      .asset-product-cell span{display:block;color:#637089;font-size:10.5px;margin-top:3px;}
+      .asset-product-cell em{display:block;font-style:normal;color:#7B879C;font-size:10.5px;margin-top:2px;}
+      .asset-row-actions{display:flex;gap:6px;}
+      .asset-row-actions button{width:28px;height:28px;border-radius:9px;border:0;background:#F3F7FC;color:#637089;display:grid;place-items:center;cursor:pointer;}
+      .asset-row-actions button:hover{background:#EAF4FF;color:#2F67FF;}
+      .asset-detail-page{background:#EEF3F9;margin:-4px;border-radius:18px;padding:18px;}
+      .asset-detail-top{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:18px;}
+      .asset-back{display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;text-decoration:none;}
+      .asset-detail-top h2{font-family:'Space Grotesk';font-size:25px;line-height:1;margin:0;color:#17213A;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+      .asset-detail-top p{margin:8px 0 0;color:#637089;font-size:12.5px;font-weight:700;}
+      .asset-detail-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;}
+      .asset-detail-grid{display:grid;grid-template-columns:minmax(320px,420px) 1fr;gap:18px;align-items:start;}
+      .asset-detail-left,.asset-detail-right{display:flex;flex-direction:column;gap:16px;}
+      .asset-photo-card{position:relative;background:#FFFFFF;border:1px solid #DDE6F2;border-radius:18px;padding:16px;min-height:280px;overflow:hidden;box-shadow:0 14px 32px rgba(31,41,55,.08);}
+      .asset-photo-card>.scan-step{position:absolute;left:18px;top:16px;z-index:2;}
+      .asset-product-visual{height:250px;border-radius:16px;border:1px solid #E2EAF4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;}
+      .asset-product-visual b{font-family:'Space Grotesk';font-size:28px;color:#17213A;}
+      .asset-product-visual em{font-style:normal;color:#637089;font-weight:900;}
+      .asset-photo-count{position:absolute;right:26px;bottom:25px;background:rgba(23,33,58,.78);color:#FFFFFF;border-radius:999px;padding:5px 9px;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:900;}
+      .asset-thumb-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;}
+      .asset-detail-thumb{height:82px;border:1px solid #DDE6F2;border-radius:12px;background:#FFFFFF;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#637089;font-size:11px;font-weight:900;overflow:hidden;}
+      .asset-detail-thumb.active{border-color:#2F67FF;box-shadow:0 0 0 2px rgba(47,103,255,.1);}
+      .asset-detail-thumb.more{background:#F7FAFE;color:#17213A;}
+      .asset-qr-card{background:#FFFFFF;border:1px solid #DDE6F2;border-radius:18px;padding:22px;text-align:center;box-shadow:0 14px 32px rgba(31,41,55,.08);}
+      .fake-qr{position:relative;width:132px;height:132px;margin:0 auto 12px;background:repeating-linear-gradient(90deg,#111 0 5px,#fff 5px 9px),repeating-linear-gradient(0deg,rgba(255,255,255,.55) 0 6px,rgba(0,0,0,.55) 6px 10px);border:8px solid #FFFFFF;box-shadow:0 0 0 1px #DDE6F2;border-radius:6px;}
+      .fake-qr i{position:absolute;width:25px;height:25px;border:6px solid #111;background:#fff;}
+      .fake-qr i:nth-child(1){left:5px;top:5px}.fake-qr i:nth-child(2){right:5px;top:5px}.fake-qr i:nth-child(3){left:5px;bottom:5px}
+      .fake-qr span{position:absolute;left:50%;bottom:-31px;transform:translateX(-50%);font-size:10px;font-family:'JetBrains Mono';font-weight:900;color:#17213A;background:#FFFFFF;padding:0 6px;}
+      .asset-qr-card>b{display:block;margin-top:18px;color:#17213A;}
+      .asset-qr-card p{margin:4px 0 14px;color:#7B879C;font-size:11.5px;font-weight:700;}
+      .asset-quick-panel,.asset-info-panel{background:#FFFFFF;border:1px solid #DDE6F2;border-radius:18px;padding:20px 22px;box-shadow:0 14px 32px rgba(31,41,55,.08);}
+      .asset-panel-title{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:900;color:#17213A;margin-bottom:16px;}
+      .asset-action-grid{display:grid;grid-template-columns:repeat(5,minmax(110px,1fr));gap:12px;}
+      .asset-action{height:86px;border:1px solid #E2EAF4;background:#FFFFFF;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;font-family:'Sarabun';font-size:12px;font-weight:900;color:#25314F;cursor:pointer;box-shadow:0 8px 18px rgba(31,41,55,.05);}
+      .asset-action span{width:42px;height:42px;border-radius:13px;color:#FFFFFF;display:grid;place-items:center;background:#2F67FF;}
+      .asset-action.violet span{background:#8B5CF6}.asset-action.indigo span{background:#4F6BED}.asset-action.red span{background:#F15B71}.asset-action.orange span{background:#FF7A1A}.asset-action.purple span{background:#6966E8}.asset-action.slate span{background:#5B6B80}.asset-action.navy span{background:#123469}.asset-action.teal span{background:#28C4A6}.asset-action.yellow span{background:#FFC22D;color:#17213A}
+      .asset-action:hover{transform:translateY(-1px);box-shadow:0 12px 24px rgba(31,41,55,.09);}
+      .asset-detail-tabs{display:flex;gap:8px;align-items:center;border-bottom:1px solid #E2EAF4;margin:-4px 0 16px;padding-bottom:10px;flex-wrap:wrap;}
+      .asset-detail-tabs button{border:0;background:transparent;color:#637089;font-family:'Sarabun';font-size:12px;font-weight:900;padding:8px 10px;border-radius:10px;display:flex;align-items:center;gap:6px;cursor:pointer;}
+      .asset-detail-tabs button.active{background:#EAF4FF;color:#2F67FF;}
+      .asset-detail-list{display:flex;flex-direction:column;}
+      .asset-detail-list>div{display:grid;grid-template-columns:210px 1fr;gap:16px;padding:11px 6px;border-bottom:1px solid #EEF2F7;align-items:center;}
+      .asset-detail-list span{color:#7B879C;font-size:12px;font-weight:800;}
+      .asset-detail-list b{justify-self:end;text-align:right;color:#17213A;font-size:12.5px;}
+      .asset-history-list{display:flex;flex-direction:column;gap:10px;}
+      .asset-history-list>div{border:1px solid #E2EAF4;background:#F8FBFF;border-radius:12px;padding:12px;}
+      .asset-history-list b{display:block;color:#17213A;font-size:12.5px;}
+      .asset-history-list span{display:block;color:#637089;font-size:11.5px;margin-top:4px;}
+      .aging-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px;}
+      .aging-detail-head h2{font-family:'Space Grotesk';font-size:21px;margin:0;color:#17213A;}
+      .aging-detail-head p{margin:6px 0 0;color:#637089;font-size:12.5px;font-weight:700;}
+      .aging-project-panel{background:#F8FBFF;border:1px solid #DDE6F2;border-radius:14px;padding:14px;margin-top:14px;}
+      .aging-project-panel h3{margin:0 0 10px;color:#17213A;font-size:14px;}
+      .aging-detail-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:14px;}
       .priority-pill.red{background:rgba(241,91,113,.18);color:var(--danger);border:1px solid rgba(241,91,113,.35);}
       .priority-pill.yellow{background:rgba(245,168,60,.2);color:#A46400;border:1px solid rgba(245,168,60,.42);}
       .priority-pill.blue{background:rgba(62,126,224,.14);color:var(--amber);border:1px solid rgba(62,126,224,.32);}
@@ -6624,8 +7006,8 @@ function GlobalStyle() {
       @media (max-width:1500px){.exec-inventory-grid{grid-template-columns:1fr;}.donut-pair-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.compact-donut-wrap{grid-template-columns:180px 1fr;grid-template-rows:auto;justify-items:stretch;min-height:220px;}.exec-service-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.backlog-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
       @media (max-width:1280px){.cs-dashboard-panel .grid.g4{grid-template-columns:repeat(2,minmax(0,1fr));}}
       @media (max-width:1100px){.exec-kpi-grid,.exec-main-grid,.exec-bottom-grid{grid-template-columns:1fr 1fr;}.warehouse-status-body{grid-template-columns:1fr;}.warehouse-metrics{grid-template-columns:1fr 1fr 1fr;}.inventory-donut-wrap{flex-direction:column;align-items:flex-start;}.sales-matrix{grid-template-columns:130px repeat(3,minmax(120px,1fr)) 120px;}.topbar{height:auto;min-height:60px;padding:10px 16px;align-items:flex-start;}.topbar-right{flex-wrap:wrap;justify-content:flex-end;gap:8px;}}
-      @media (max-width:1300px){.allocation-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.alloc-control-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}}
-      @media (max-width:900px){.alloc-control-hero{flex-direction:column;align-items:stretch;}.alloc-control-kpis{grid-template-columns:1fr;}.alloc-timeline-panel{overflow-x:auto;}.alloc-timeline-axis,.alloc-timeline-row{min-width:780px;}.allocation-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-progress-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-event{grid-template-columns:1fr;gap:2px;}.console-hero{flex-direction:column;align-items:stretch;}.console-pack-target{min-width:0;}}
+      @media (max-width:1300px){.asset-detail-grid{grid-template-columns:1fr;}.asset-action-grid{grid-template-columns:repeat(3,minmax(110px,1fr));}.allocation-filter-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.alloc-control-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}}
+      @media (max-width:900px){.asset-detail-top{flex-direction:column;}.asset-detail-actions{justify-content:flex-start;}.asset-action-grid{grid-template-columns:repeat(2,minmax(110px,1fr));}.asset-detail-list>div{grid-template-columns:1fr;gap:4px;}.asset-detail-list b{justify-self:start;text-align:left;}.asset-register-head,.asset-table-toolbar{flex-direction:column;align-items:stretch;}.asset-actions{justify-content:flex-start;}.asset-table-toolbar .search-box{max-width:none;}.alloc-control-hero{flex-direction:column;align-items:stretch;}.alloc-control-kpis{grid-template-columns:1fr;}.alloc-timeline-panel{overflow-x:auto;}.alloc-timeline-axis,.alloc-timeline-row{min-width:780px;}.allocation-filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-progress-strip{grid-template-columns:repeat(2,minmax(0,1fr));}.allocation-event{grid-template-columns:1fr;gap:2px;}.console-hero{flex-direction:column;align-items:stretch;}.console-pack-target{min-width:0;}}
       @media (max-width:760px){.exec-kpi-grid,.exec-main-grid,.exec-bottom-grid,.exec-inventory-grid,.donut-pair-grid,.exec-service-grid,.warehouse-metrics,.backlog-grid,.sales-matrix{grid-template-columns:1fr;}.backlog-head{flex-direction:column;}.backlog-total{text-align:left;width:100%;}.category-wrap{flex-direction:column;align-items:flex-start;}.inventory-donut-wrap{flex-direction:row;align-items:center;flex-wrap:wrap;}.compact-donut-wrap{grid-template-columns:1fr;justify-items:center;min-height:auto;}.inventory-pill{flex:1 1 130px;}.cs-dashboard-panel .grid.g4{grid-template-columns:1fr;}}
 
       @media print{
