@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutGrid, Database, PackageSearch, ListTree, Boxes, Truck, Radio,
   BrainCircuit, Search, ChevronRight, X, Star, Wifi, WifiOff, RefreshCw,
@@ -213,20 +213,21 @@ const nextDestinationAfterPreworkOf = (item) => item?.nextAfterPrework || (Numbe
 
 // Current stock — now with LPN + age (days since received) for Aging / Hold reports
 const STOCK_INIT = [
-  { key: 1, itemId: "6425011001", batch: "LOT-1001-A", lpn: "LPN-000231", loc: "A-03-12-B", qty: 210, status: "AVL", age: 12, stickerStatus: "DONE" },
-  { key: 2, itemId: "6425011001", batch: "LOT-1001-B", lpn: "LPN-000255", loc: "A-05-02-C", qty: 132, status: "AVL", age: 48, stickerStatus: "PENDING" },
-  { key: 3, itemId: "6425011089", batch: "LOT-1089-A", lpn: "LPN-000310", loc: "B-01-04-A", qty: 980, status: "AVL", age: 5, stickerStatus: "DONE" },
-  { key: 4, itemId: "6425011089", batch: "LOT-1089-A", lpn: "LPN-000311", loc: "MZ-01-01-A", qty: 300, status: "AVL", age: 9, stickerStatus: "PENDING" },
-  { key: 5, itemId: "6425012207", batch: "LOT-2207-A", lpn: "LPN-000402", loc: "A-05-02-C", qty: 566, status: "AVL", age: 22, stickerStatus: "PENDING" },
-  { key: 6, itemId: "6425013320", batch: "LOT-3320-A", lpn: "LPN-000501", loc: "C-02-01-A", qty: 128, status: "AVL", age: 96 },
-  { key: 7, itemId: "6425014412", batch: "LOT-4412-A", lpn: "LPN-000610", loc: "B-01-07-D", qty: 700, status: "AVL", age: 3, stickerStatus: "DONE" },
-  { key: 8, itemId: "6425014412", batch: "LOT-4412-B", lpn: "LPN-000611", loc: "D-01-01-A", qty: 240, status: "HOLD", age: 30, stickerStatus: "PENDING" },
-  { key: 9, itemId: "6425015590", batch: "LOT-5590-A", lpn: "LPN-000705", loc: "C-04-03-B", qty: 87, status: "AVL", age: 145 },
-  { key: 10, itemId: "6425016678", batch: "LOT-6678-A", lpn: "LPN-000811", loc: "D-01-01-A", qty: 2140, status: "AVL", age: 15, stickerStatus: "PENDING" },
-  { key: 11, itemId: "6425017766", batch: "LOT-7766-A", lpn: "LPN-000905", loc: "A-08-05-C", qty: 64, status: "AVL", age: 180 },
-  { key: 12, itemId: "6425018854", batch: "LOT-8854-A", lpn: "LPN-001002", loc: "D-02-02-B", qty: 1560, status: "AVL", age: 25, stickerStatus: "IN_PROGRESS" },
-  { key: 13, itemId: "6425019942", batch: "LOT-9942-A", lpn: "LPN-001105", loc: "B-03-01-A", qty: 520, status: "AVL", age: 40, stickerStatus: "DONE" },
-  { key: 14, itemId: "6425019942", batch: "LOT-9942-B", lpn: "LPN-001106", loc: "X-QC-01", qty: 200, status: "QC", age: 60, stickerStatus: "PENDING" },
+  { key: 1, itemId: "6425011001", batch: "Lot20260826-01-A001", lotCode: "Lot20260826-01-A001", costCode: "A001", receiveDate: "2026-08-26", lpn: "LPN-000231", loc: "A-03-12-B", qty: 210, status: "AVL", age: 12, stickerStatus: "DONE" },
+  { key: 2, itemId: "6425011001", batch: "Lot20260818-01-A002", lotCode: "Lot20260818-01-A002", costCode: "A002", receiveDate: "2026-08-18", lpn: "LPN-000255", loc: "A-05-02-C", qty: 132, status: "AVL", age: 48, stickerStatus: "PENDING" },
+  { key: 3, itemId: "6425011089", batch: "Lot20260827-01-B101", lotCode: "Lot20260827-01-B101", costCode: "B101", receiveDate: "2026-08-27", lpn: "LPN-000310", loc: "B-01-04-A", qty: 980, status: "AVL", age: 5, stickerStatus: "DONE" },
+  { key: 4, itemId: "6425011089", batch: "Lot20260822-02-B102", lotCode: "Lot20260822-02-B102", costCode: "B102", receiveDate: "2026-08-22", lpn: "LPN-000311", loc: "MZ-01-01-A", qty: 300, status: "AVL", age: 9, stickerStatus: "PENDING" },
+  { key: 5, itemId: "6425012207", batch: "Lot20260819-01-C210", lotCode: "Lot20260819-01-C210", costCode: "C210", receiveDate: "2026-08-19", lpn: "LPN-000402", loc: "A-05-02-C", qty: 566, status: "AVL", age: 22, stickerStatus: "PENDING" },
+  { key: 6, itemId: "6425013320", batch: "Lot20260715-01-D330", lotCode: "Lot20260715-01-D330", costCode: "D330", receiveDate: "2026-07-15", lpn: "LPN-000501", loc: "C-02-01-A", qty: 128, status: "AVL", age: 96 },
+  { key: 7, itemId: "6425014412", batch: "Lot20260825-01-E441", lotCode: "Lot20260825-01-E441", costCode: "E441", receiveDate: "2026-08-25", lpn: "LPN-000610", loc: "B-01-07-D", qty: 700, status: "AVL", age: 3, stickerStatus: "DONE" },
+  { key: 8, itemId: "6425014412", batch: "Lot20260805-03-E442", lotCode: "Lot20260805-03-E442", costCode: "E442", receiveDate: "2026-08-05", lpn: "LPN-000611", loc: "D-01-01-A", qty: 240, status: "HOLD", age: 30, stickerStatus: "PENDING" },
+  { key: 9, itemId: "6425015590", batch: "Lot20260526-01-F559", lotCode: "Lot20260526-01-F559", costCode: "F559", receiveDate: "2026-05-26", lpn: "LPN-000705", loc: "C-04-03-B", qty: 87, status: "AVL", age: 145 },
+  { key: 10, itemId: "6425016678", batch: "Lot20260820-01-G667", lotCode: "Lot20260820-01-G667", costCode: "G667", receiveDate: "2026-08-20", lpn: "LPN-000811", loc: "D-01-01-A", qty: 2140, status: "AVL", age: 15, stickerStatus: "PENDING" },
+  { key: 11, itemId: "6425017766", batch: "Lot20260301-01-H776", lotCode: "Lot20260301-01-H776", costCode: "H776", receiveDate: "2026-03-01", lpn: "LPN-000905", loc: "A-08-05-C", qty: 64, status: "AVL", age: 180 },
+  { key: 12, itemId: "6425018854", batch: "Lot20260821-01-I885", lotCode: "Lot20260821-01-I885", costCode: "I885", receiveDate: "2026-08-21", lpn: "LPN-001002", loc: "D-02-02-B", qty: 1560, status: "AVL", age: 25, stickerStatus: "IN_PROGRESS" },
+  { key: 13, itemId: "6425019942", batch: "Lot20260810-01-J994", lotCode: "Lot20260810-01-J994", costCode: "J994", receiveDate: "2026-08-10", lpn: "LPN-001105", loc: "B-03-01-A", qty: 520, status: "AVL", age: 40, stickerStatus: "DONE" },
+  { key: 14, itemId: "6425019942", batch: "Lot20260729-03-J995", lotCode: "Lot20260729-03-J995", costCode: "J995", receiveDate: "2026-07-29", lpn: "LPN-001106", loc: "X-QC-01", qty: 200, status: "QC", age: 60, stickerStatus: "PENDING" },
+  { key: 15, itemId: "6425019942", batch: "Lot20260826-01-J996", lotCode: "Lot20260826-01-J996", costCode: "J996", receiveDate: "2026-08-26", lpn: "LPN-001107", loc: "B-03-01-A", qty: 180, status: "AVL", age: 2, stickerStatus: "DONE" },
 ];
 
 const DOCKS = ["Dock-1", "Dock-2", "Dock-3"];
@@ -259,17 +260,17 @@ const ALLOC_ORDERS_INIT = [
 const PICK_TASKS_INIT = [];
 
 const SERIAL_UNITS_INIT = [
-  { unitId: "UNIT-NB-0001", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", level: "Piece", lpn: "LPN-PACK-NB-0001", boxBarcode: "CTN-NB-0001", sn: "SN-NB-ASUS-0001", imei: "IMEI-356789100000001", qty: 1, loc: "A-03-12-B", status: "Available" },
-  { unitId: "UNIT-NB-0002", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", level: "Piece", lpn: "LPN-PACK-NB-0002", boxBarcode: "CTN-NB-0002", sn: "SN-NB-ASUS-0002", imei: "IMEI-356789100000002", qty: 1, loc: "A-03-12-B", status: "Available" },
-  { unitId: "UNIT-NB-0003", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", level: "Piece", lpn: "LPN-PACK-NB-0003", boxBarcode: "CTN-NB-0003", sn: "SN-NB-ASUS-0003", imei: "IMEI-356789100000003", qty: 1, loc: "A-03-12-B", status: "Available" },
-  { unitId: "UNIT-NB-0004", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", level: "Piece", lpn: "LPN-PACK-NB-0004", boxBarcode: "CTN-NB-0004", sn: "SN-NB-ASUS-0004", imei: "IMEI-356789100000004", qty: 1, loc: "A-03-12-B", status: "Available" },
-  { unitId: "UNIT-NB-0005", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", level: "Piece", lpn: "LPN-PACK-NB-0005", boxBarcode: "CTN-NB-0005", sn: "SN-NB-ASUS-0005", imei: "IMEI-356789100000005", qty: 1, loc: "A-03-12-B", status: "Available" },
-  { unitId: "BOX-M331-001", po: "PO-DEMO-002", sampleOrder: "SO-88250", itemId: "6425016678", level: "Box", lpn: "LPN-PACK-M331-001", boxBarcode: "CTN-M331-001", sn: "BOX-M331-001", imei: "", qty: 24, loc: "D-01-01-A", status: "Available" },
-  { unitId: "BOX-M331-002", po: "PO-DEMO-002", sampleOrder: "SO-88250", itemId: "6425016678", level: "Box", lpn: "LPN-PACK-M331-002", boxBarcode: "CTN-M331-002", sn: "BOX-M331-002", imei: "", qty: 24, loc: "D-01-01-A", status: "Available" },
-  { unitId: "BOX-M331-003", po: "PO-DEMO-002", sampleOrder: "SO-88250", itemId: "6425016678", level: "Box", lpn: "LPN-PACK-M331-003", boxBarcode: "CTN-M331-003", sn: "BOX-M331-003", imei: "", qty: 24, loc: "D-01-01-A", status: "Available" },
-  { unitId: "PALLET-RAM-001", po: "PO-DEMO-003", sampleOrder: "SO-88266", itemId: "6425014412", level: "Pallet", lpn: "LPN-PACK-RAM-001", boxBarcode: "PLT-RAM-001", sn: "PLT-RAM-DDR5-001", imei: "", qty: 60, loc: "B-01-07-D", status: "Available" },
-  { unitId: "BOX-AX55-001", po: "PO-DEMO-004", sampleOrder: "SO-88270", itemId: "6425012207", level: "Box", lpn: "LPN-PACK-AX55-001", boxBarcode: "CTN-AX55-001", sn: "BOX-AX55-001", imei: "", qty: 12, loc: "A-05-02-C", status: "Available" },
-  { unitId: "BOX-AX55-002", po: "PO-DEMO-004", sampleOrder: "SO-88270", itemId: "6425012207", level: "Box", lpn: "LPN-PACK-AX55-002", boxBarcode: "CTN-AX55-002", sn: "BOX-AX55-002", imei: "", qty: 12, loc: "A-05-02-C", status: "Available" },
+  { unitId: "UNIT-NB-0001", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", lotCode: "Lot20260826-01-A001", batch: "Lot20260826-01-A001", level: "Piece", lpn: "LPN-PACK-NB-0001", boxBarcode: "CTN-NB-0001", sn: "SN-NB-ASUS-0001", imei: "IMEI-356789100000001", qty: 1, loc: "A-03-12-B", status: "Available" },
+  { unitId: "UNIT-NB-0002", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", lotCode: "Lot20260826-01-A001", batch: "Lot20260826-01-A001", level: "Piece", lpn: "LPN-PACK-NB-0002", boxBarcode: "CTN-NB-0002", sn: "SN-NB-ASUS-0002", imei: "IMEI-356789100000002", qty: 1, loc: "A-03-12-B", status: "Available" },
+  { unitId: "UNIT-NB-0003", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", lotCode: "Lot20260826-01-A001", batch: "Lot20260826-01-A001", level: "Piece", lpn: "LPN-PACK-NB-0003", boxBarcode: "CTN-NB-0003", sn: "SN-NB-ASUS-0003", imei: "IMEI-356789100000003", qty: 1, loc: "A-03-12-B", status: "Available" },
+  { unitId: "UNIT-NB-0004", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", lotCode: "Lot20260826-01-A001", batch: "Lot20260826-01-A001", level: "Piece", lpn: "LPN-PACK-NB-0004", boxBarcode: "CTN-NB-0004", sn: "SN-NB-ASUS-0004", imei: "IMEI-356789100000004", qty: 1, loc: "A-03-12-B", status: "Available" },
+  { unitId: "UNIT-NB-0005", po: "PO-DEMO-001", sampleOrder: "SO-88213", itemId: "6425011001", lotCode: "Lot20260818-01-A002", batch: "Lot20260818-01-A002", level: "Piece", lpn: "LPN-PACK-NB-0005", boxBarcode: "CTN-NB-0005", sn: "SN-NB-ASUS-0005", imei: "IMEI-356789100000005", qty: 1, loc: "A-03-12-B", status: "Available" },
+  { unitId: "BOX-M331-001", po: "PO-DEMO-002", sampleOrder: "SO-88250", itemId: "6425016678", lotCode: "Lot20260820-01-G667", batch: "Lot20260820-01-G667", level: "Box", lpn: "LPN-PACK-M331-001", boxBarcode: "CTN-M331-001", sn: "BOX-M331-001", imei: "", qty: 24, loc: "D-01-01-A", status: "Available" },
+  { unitId: "BOX-M331-002", po: "PO-DEMO-002", sampleOrder: "SO-88250", itemId: "6425016678", lotCode: "Lot20260820-01-G667", batch: "Lot20260820-01-G667", level: "Box", lpn: "LPN-PACK-M331-002", boxBarcode: "CTN-M331-002", sn: "BOX-M331-002", imei: "", qty: 24, loc: "D-01-01-A", status: "Available" },
+  { unitId: "BOX-M331-003", po: "PO-DEMO-002", sampleOrder: "SO-88250", itemId: "6425016678", lotCode: "Lot20260820-01-G667", batch: "Lot20260820-01-G667", level: "Box", lpn: "LPN-PACK-M331-003", boxBarcode: "CTN-M331-003", sn: "BOX-M331-003", imei: "", qty: 24, loc: "D-01-01-A", status: "Available" },
+  { unitId: "PALLET-RAM-001", po: "PO-DEMO-003", sampleOrder: "SO-88266", itemId: "6425014412", lotCode: "Lot20260825-01-E441", batch: "Lot20260825-01-E441", level: "Pallet", lpn: "LPN-PACK-RAM-001", boxBarcode: "PLT-RAM-001", sn: "PLT-RAM-DDR5-001", imei: "", qty: 60, loc: "B-01-07-D", status: "Available" },
+  { unitId: "BOX-AX55-001", po: "PO-DEMO-004", sampleOrder: "SO-88270", itemId: "6425012207", lotCode: "Lot20260819-01-C210", batch: "Lot20260819-01-C210", level: "Box", lpn: "LPN-PACK-AX55-001", boxBarcode: "CTN-AX55-001", sn: "BOX-AX55-001", imei: "", qty: 12, loc: "A-05-02-C", status: "Available" },
+  { unitId: "BOX-AX55-002", po: "PO-DEMO-004", sampleOrder: "SO-88270", itemId: "6425012207", lotCode: "Lot20260819-01-C210", batch: "Lot20260819-01-C210", level: "Box", lpn: "LPN-PACK-AX55-002", boxBarcode: "CTN-AX55-002", sn: "BOX-AX55-002", imei: "", qty: 12, loc: "A-05-02-C", status: "Available" },
 ];
 
 const CARRIERS = [
@@ -349,11 +350,11 @@ const USERS_INIT = [
 const STICKER_SOURCES = ["Inbound Staging", "ASRS", "Onfloor", "Putaway Staging"];
 const STICKER_MACHINES = Array.from({ length: 7 }, (_, i) => `เครื่อง ${i + 1}`);
 const STICKER_TASKS_INIT = [
-  { id: "PW-2001", order: "SO-88213", itemId: "6425011001", qtyRequired: 25, qtyDone: 25, source: "Inbound Staging", machineNo: "เครื่อง 1", workDate: "2569-07-10", status: "Completed", note: "ติดสติกเกอร์ QR รับประกันสินค้า" },
-  { id: "PW-2002", order: "SO-88250", itemId: "6425016678", qtyRequired: 200, qtyDone: 120, source: "ASRS", machineNo: "เครื่อง 3", workDate: "2569-07-10", status: "In Machine", note: "ติดสติกเกอร์ราคาโปรโมชั่น" },
-  { id: "PW-2003", order: "SO-88266", itemId: "6425014412", qtyRequired: 60, qtyDone: 0, source: "Putaway Staging", machineNo: "เครื่อง 5", workDate: "2569-07-10", status: "Called", note: "พันฟิล์มกันรอย + ติดป้ายรุ่น" },
-  { id: "PW-2004", order: "SO-88270", itemId: "6425012207", qtyRequired: 150, qtyDone: 150, source: "ASRS", machineNo: "เครื่อง 2", workDate: "2569-07-09", status: "Completed", note: "ติดสติกเกอร์ Serial ภาษาไทย" },
-  { id: "PW-2005", order: "SO-88291", itemId: "6425018854", qtyRequired: 80, qtyDone: 35, source: "Inbound Staging", machineNo: "เครื่อง 7", workDate: "2569-07-08", status: "In Machine", note: "ติดสติกเกอร์คู่มือย่อภาษาไทย" },
+  { id: "PW-2001", order: "SO-88213", itemId: "6425011001", lot: "Lot20260826-01-A001", lotCode: "Lot20260826-01-A001", qtyRequired: 25, qtyDone: 25, source: "Inbound Staging", machineNo: "เครื่อง 1", workDate: "2569-07-10", status: "Completed", note: "ติดสติกเกอร์ QR รับประกันสินค้า" },
+  { id: "PW-2002", order: "SO-88250", itemId: "6425016678", lot: "Lot20260820-01-G667", lotCode: "Lot20260820-01-G667", qtyRequired: 200, qtyDone: 120, source: "ASRS", machineNo: "เครื่อง 3", workDate: "2569-07-10", status: "In Machine", note: "ติดสติกเกอร์ราคาโปรโมชั่น" },
+  { id: "PW-2003", order: "SO-88266", itemId: "6425014412", lot: "Lot20260825-01-E441", lotCode: "Lot20260825-01-E441", qtyRequired: 60, qtyDone: 0, source: "Putaway Staging", machineNo: "เครื่อง 5", workDate: "2569-07-10", status: "Called", note: "พันฟิล์มกันรอย + ติดป้ายรุ่น" },
+  { id: "PW-2004", order: "SO-88270", itemId: "6425012207", lot: "Lot20260819-01-C210", lotCode: "Lot20260819-01-C210", qtyRequired: 150, qtyDone: 150, source: "ASRS", machineNo: "เครื่อง 2", workDate: "2569-07-09", status: "Completed", note: "ติดสติกเกอร์ Serial ภาษาไทย" },
+  { id: "PW-2005", order: "SO-88291", itemId: "6425018854", lot: "Lot20260821-01-I885", lotCode: "Lot20260821-01-I885", qtyRequired: 80, qtyDone: 35, source: "Inbound Staging", machineNo: "เครื่อง 7", workDate: "2569-07-08", status: "In Machine", note: "ติดสติกเกอร์คู่มือย่อภาษาไทย" },
 ];
 
 // -- Returns Management --
@@ -419,14 +420,14 @@ const CS_CASES_INIT = seedCsCases();
 
 // -- Inventory Cycle Count (blind count via Handheld) --
 const CYCLE_COUNT_INIT = [
-  { id: "CC-9001", loc: "A-03-12-B", itemId: "6425011001", batch: "LOT-1001-A", expectedQty: 210, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9002", loc: "B-01-04-A", itemId: "6425011089", batch: "LOT-1089-A", expectedQty: 980, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9003", loc: "A-05-02-C", itemId: "6425012207", batch: "LOT-2207-A", expectedQty: 566, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9004", loc: "C-02-01-A", itemId: "6425013320", batch: "LOT-3320-A", expectedQty: 128, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9005", loc: "B-01-07-D", itemId: "6425014412", batch: "LOT-4412-A", expectedQty: 700, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9006", loc: "D-01-01-A", itemId: "6425016678", batch: "LOT-6678-A", expectedQty: 2140, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9007", loc: "D-02-02-B", itemId: "6425018854", batch: "LOT-8854-A", expectedQty: 1560, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
-  { id: "CC-9008", loc: "B-03-01-A", itemId: "6425019942", batch: "LOT-9942-A", expectedQty: 520, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9001", loc: "A-03-12-B", itemId: "6425011001", batch: "Lot20260826-01-A001", expectedQty: 210, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9002", loc: "B-01-04-A", itemId: "6425011089", batch: "Lot20260827-01-B101", expectedQty: 980, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9003", loc: "A-05-02-C", itemId: "6425012207", batch: "Lot20260819-01-C210", expectedQty: 566, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9004", loc: "C-02-01-A", itemId: "6425013320", batch: "Lot20260715-01-D330", expectedQty: 128, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9005", loc: "B-01-07-D", itemId: "6425014412", batch: "Lot20260825-01-E441", expectedQty: 700, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9006", loc: "D-01-01-A", itemId: "6425016678", batch: "Lot20260820-01-G667", expectedQty: 2140, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9007", loc: "D-02-02-B", itemId: "6425018854", batch: "Lot20260821-01-I885", expectedQty: 1560, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
+  { id: "CC-9008", loc: "B-03-01-A", itemId: "6425019942", batch: "Lot20260810-01-J994", expectedQty: 520, countedQty: null, status: "รอนับ", variance: null, countedBy: null, adjusted: false },
 ];
 
 // -- Replenishment rules (Min-Max per pick location) --
@@ -697,6 +698,36 @@ const sizeTextOf = (item) => {
   const [longSide, midSide, shortSide] = sortedDims(item?.dim);
   return `${longSide}x${midSide}x${shortSide} cm / ${item?.dim?.wt || 0} kg`;
 };
+const compactDateDigits = (dateLike = new Date()) => {
+  const raw = String(dateLike || "");
+  const d = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (d) return `${d[1]}${d[2]}${d[3]}`;
+  const dt = dateLike instanceof Date ? dateLike : new Date();
+  return `${dt.getFullYear()}${String(dt.getMonth() + 1).padStart(2, "0")}${String(dt.getDate()).padStart(2, "0")}`;
+};
+const lotStatusCodeOf = (status) => {
+  const text = String(status || "").toUpperCase();
+  if (text.includes("DEMO")) return "02";
+  if (text.includes("HOLD") || text.includes("QC")) return "03";
+  if (text.includes("DMG") || text.includes("REJECT")) return "04";
+  return "01";
+};
+const costCodeForItem = (item, seed = "") => {
+  const text = `${item?.brand || ""}${item?.id || ""}${seed}`;
+  const n = text.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 9000;
+  return `${String(item?.brand || "A").replace(/[^A-Z0-9]/gi, "").slice(0, 1).toUpperCase() || "A"}${String(n + 1000).slice(-4)}`;
+};
+const makeLotCode = ({ itemId, receiveDate, status = "AVL", costCode, seq = 1 } = {}) => {
+  const item = itemOf(itemId);
+  return `Lot${compactDateDigits(receiveDate)}-${lotStatusCodeOf(status)}-${costCode || costCodeForItem(item, `${receiveDate}-${seq}`)}`;
+};
+const lotCodeOf = (row) => row?.lotCode || row?.lot || row?.batch || "";
+const parseLotCode = (code) => {
+  const m = String(code || "").match(/^Lot(\d{4})(\d{2})(\d{2})-(\d{2})-([A-Z0-9]+)$/i);
+  if (!m) return { raw: code || "-", receiveDate: "-", statusCode: "-", costCode: "-", valid: false };
+  return { raw: code, receiveDate: `${m[1]}-${m[2]}-${m[3]}`, statusCode: m[4], costCode: m[5], valid: true };
+};
+const lotStatusLabelOf = (code) => ({ "01": "สินค้าขาย", "02": "สินค้า Demo", "03": "Hold / QC", "04": "Reject / Damage" }[String(code || "").padStart(2, "0")] || "Other");
 const plantStorageStats = (plantId, stock = []) => {
   const locs = LOCATIONS.filter((l) => l.plant === plantId);
   const capacity = locs.reduce((a, l) => a + (Number(l.capacity) || 0), 0);
@@ -892,20 +923,23 @@ function moveStockQty(setStock, { itemId, fromLoc, toLoc, qty, toStatus = "AVL",
   setStock((list) => {
     let next = [...list];
     let remaining = qty;
+    let sourceMeta = null;
     next = next.map((r) => {
       if (remaining <= 0) return r;
       if (r.itemId === itemId && r.loc === fromLoc && r.status === "AVL" && r.qty > 0) {
         const take = Math.min(remaining, r.qty);
         remaining -= take;
+        sourceMeta = sourceMeta || r;
         return { ...r, qty: r.qty - take };
       }
       return r;
     }).filter((r) => r.qty > 0);
     const moved = qty - remaining;
     if (moved > 0) {
-      const existing = next.find((r) => r.itemId === itemId && r.loc === toLoc && r.status === toStatus);
+      const sourceLot = lotCodeOf(sourceMeta);
+      const existing = next.find((r) => r.itemId === itemId && r.loc === toLoc && r.status === toStatus && (!sourceLot || lotCodeOf(r) === sourceLot));
       if (existing) next = next.map((r) => (r === existing ? { ...r, qty: r.qty + moved } : r));
-      else next = [...next, { key: Date.now() + Math.random(), itemId, batch: `${batchPrefix}-${Date.now()}`, lpn: "-", loc: toLoc, qty: moved, status: toStatus, age: 0 }];
+      else next = [...next, { key: Date.now() + Math.random(), itemId, batch: sourceLot || `${batchPrefix}-${Date.now()}`, lotCode: sourceLot, costCode: sourceMeta?.costCode, receiveDate: sourceMeta?.receiveDate, mfgDate: sourceMeta?.mfgDate, lpn: sourceMeta?.lpn || "-", loc: toLoc, qty: moved, status: toStatus, age: sourceMeta?.age || 0, stickerStatus: sourceMeta?.stickerStatus }];
     }
     return next;
   });
@@ -965,16 +999,17 @@ export default function App() {
 
   // Shared transition: move reserved (ALLOC) or legacy-available stock into PICKED status,
   // and mark the owning allocation order fully "Picked" once every source line is done.
-  const applyPick = ({ orderId, itemId, loc, qty }) => {
-    const pickSource = stock.find((r) => r.itemId === itemId && r.loc === loc && ["ALLOC", "AVL"].includes(r.status) && (!r.allocatedFor || r.allocatedFor === orderId));
+  const applyPick = ({ orderId, itemId, loc, qty, lot }) => {
+    const pickSource = stock.find((r) => r.itemId === itemId && r.loc === loc && ["ALLOC", "AVL"].includes(r.status) && (!r.allocatedFor || r.allocatedFor === orderId) && (!lot || lotCodeOf(r) === lot));
+    const pickLot = lot || lotCodeOf(pickSource);
     setStock((list) => {
       let next = [...list];
-      const allocRow = next.find((r) => r.itemId === itemId && r.loc === loc && r.status === "ALLOC" && r.allocatedFor === orderId);
-      const sourceRow = allocRow || next.find((r) => r.itemId === itemId && r.loc === loc && r.status === "AVL");
+      const allocRow = next.find((r) => r.itemId === itemId && r.loc === loc && r.status === "ALLOC" && r.allocatedFor === orderId && (!pickLot || lotCodeOf(r) === pickLot));
+      const sourceRow = allocRow || next.find((r) => r.itemId === itemId && r.loc === loc && r.status === "AVL" && (!pickLot || lotCodeOf(r) === pickLot));
       if (sourceRow) next = next.map((r) => (r === sourceRow ? { ...r, qty: r.qty - qty } : r)).filter((r) => r.qty > 0);
-      const existingPicked = next.find((r) => r.itemId === itemId && r.loc === "PICK-PACK" && r.status === "PICKED" && r.allocatedFor === orderId);
+      const existingPicked = next.find((r) => r.itemId === itemId && r.loc === "PICK-PACK" && r.status === "PICKED" && r.allocatedFor === orderId && lotCodeOf(r) === (pickLot || lotCodeOf(sourceRow) || lotCodeOf(allocRow)));
       if (existingPicked) next = next.map((r) => (r === existingPicked ? { ...r, qty: r.qty + qty } : r));
-      else next = [...next, { key: Date.now() + Math.random(), itemId, batch: sourceRow?.batch || allocRow?.batch || `PICK-${orderId}`, lpn: sourceRow?.lpn || allocRow?.lpn || "-", loc: "PICK-PACK", qty, status: "PICKED", age: 0, allocatedFor: orderId }];
+      else next = [...next, { key: Date.now() + Math.random(), itemId, batch: sourceRow?.batch || allocRow?.batch || pickLot || `PICK-${orderId}`, lotCode: pickLot || lotCodeOf(sourceRow) || lotCodeOf(allocRow), lpn: sourceRow?.lpn || allocRow?.lpn || "-", loc: "PICK-PACK", qty, status: "PICKED", age: sourceRow?.age || allocRow?.age || 0, allocatedFor: orderId }];
       return next;
     });
     setAllocOrders((list) => list.map((o) => {
@@ -982,13 +1017,13 @@ export default function App() {
       let allDone = true;
       const newLines = o.lines.map((l) => {
         if (l.itemId !== itemId) { if (!(l.sources || []).every((s) => (s.pickedQty || 0) >= s.qty)) allDone = false; return l; }
-        const newSources = (l.sources || []).map((s) => (s.loc === loc ? { ...s, pickedQty: Math.min(Number(s.qty || 0), (Number(s.pickedQty || 0) + Number(qty || 0))) } : s));
+        const newSources = (l.sources || []).map((s) => (s.loc === loc && (!pickLot || s.lot === pickLot || s.lotCode === pickLot) ? { ...s, pickedQty: Math.min(Number(s.qty || 0), (Number(s.pickedQty || 0) + Number(qty || 0))) } : s));
         if (!newSources.every((s) => (s.pickedQty || 0) >= s.qty)) allDone = false;
         return { ...l, sources: newSources };
       });
       return { ...o, lines: newLines, status: allDone ? "Picked" : o.status };
     }));
-    addTx({ type: "Pick", detail: `${orderId}: User ${userSession?.user || "system"} หยิบ ${itemOf(itemId)?.name} ${qty} หน่วย จาก ${loc} → PICK-PACK (Picked พร้อมส่ง Pack Station)`, itemId, lpn: pickSource?.lpn, lot: pickSource?.batch, fromLoc: loc, toLoc: "PICK-PACK", loc: "PICK-PACK", orderId, user: userSession?.user || "system" });
+    addTx({ type: "Pick", detail: `${orderId}: User ${userSession?.user || "system"} หยิบ ${itemOf(itemId)?.name} ${qty} หน่วย จาก ${loc} → PICK-PACK (Picked พร้อมส่ง Pack Station)`, itemId, lpn: pickSource?.lpn, lot: pickLot || lotCodeOf(pickSource), lotCode: pickLot || lotCodeOf(pickSource), fromLoc: loc, toLoc: "PICK-PACK", loc: "PICK-PACK", orderId, user: userSession?.user || "system" });
   };
 
   useEffect(() => {
@@ -2181,7 +2216,7 @@ function registerRowFromInventory(row) {
     group: row.item?.abc || "-",
     sizeCode: row.sizeCode,
     lpn: row.lpn || "-",
-    lot: row.batch || "-",
+    lot: lotCodeOf(row) || "-",
     location: row.loc,
     floor: row.floorName,
     qty: Number(row.qty || 0),
@@ -2190,7 +2225,7 @@ function registerRowFromInventory(row) {
     sticker: row.sticker?.label || stickerStateOfStock(row).label,
     status: row.status || "AVL",
     util: Number(row.util || 0),
-    sub: `${row.lpn || "-"} · ${row.batch || "-"}`,
+    sub: `${row.lpn || "-"} · ${lotCodeOf(row) || "-"}`,
   };
 }
 
@@ -2623,6 +2658,17 @@ function SynnexIdRulePanel({ onCreateItem }) {
           <h3>Digit 7-10 · Item Code</h3>
           <div className="synnex-digits"><i>XXX</i><span>-</span><em>XXX</em><span>-</span><strong>XXXX</strong></div>
           <div className="kpi-sub">ลำดับสินค้าในแผนก ช่วง 0001-9999 ห้ามซ้ำ</div>
+        </div>
+      </div>
+      <div className="lot-rule-panel">
+        <div className="lot-rule-head">
+          <div><h3>ITEM + LOT Standard</h3><p>แยก Master Item ออกจาก Lot เพื่อรู้ต้นทุน, สถานะรับเข้า และ Aging ได้ชัดเจนตลอด Flow</p></div>
+          <div className="lot-rule-formula"><span>Part 1</span><b>{prettySynnexId(generated)}</b><i>+</i><span>Part 2</span><b>{makeLotCode({ itemId: generated, receiveDate: "2026-08-28", status: "AVL", costCode: "A001" })}</b></div>
+        </div>
+        <div className="lot-rule-grid">
+          <div className="lot-rule-card green"><b>ITEM</b><strong>{generated}</strong><span>Master Item / 1 SKU ใช้รหัสเดียว ไม่ฝังลูกค้า Promo Demo หรือ Cost</span></div>
+          <div className="lot-rule-card blue"><b>LOT</b><strong>Lot20260828-01-A001</strong><span>Lot + วันที่รับเข้า + สถานะ + Cost Code เพื่อแยกต้นทุนและอายุสินค้า</span></div>
+          <div className="lot-rule-card amber"><b>Status Code</b><strong>01 / 02 / 03 / 04</strong><span>01=ขาย, 02=Demo, 03=Hold/QC, 04=Reject/Damage</span></div>
         </div>
       </div>
       <div className="grid g2" style={{ marginBottom: 18 }}>
@@ -3241,6 +3287,7 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
   const canBypassPrework = bypassPreworkAllowedOf(activeItem);
   const shouldBypassPrework = active && canBypassPrework && (receiveFlow === "prework" || (receiveFlow === "auto" && mustPrework));
   const preworkBillExists = active ? stickerTasks.some((t) => t.order === active.po && t.itemId === (activeLine?.itemId || active.itemId) && !["Completed", "Completed & Moved"].includes(t.status)) : false;
+  const lotPreview = active ? makeLotCode({ itemId: activeLine?.itemId || active.itemId, receiveDate, status: remark, costCode: costCodeForItem(activeItem, active.po) }) : "";
   const openPo = (po) => {
     const first = poLinesOf(po)[0];
     setActive(po); setLineIdx(0); setQty(String(first?.expQty || po.expQty)); setRemark("ครบถ้วน");
@@ -3251,13 +3298,13 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
     setLineIdx(idx); setQty(String(line?.expQty || 0)); setTrackingLevel(line?.trackingLevel || "Piece"); setRequireSerial(line?.needSn || line?.needImei || false); setScanText(""); setReceiveDate("2569-07-23"); setMfgDate("2569-06-01"); setPlantDecision(""); setReceiveFlow(preworkRequiredOf(itemOf(line?.itemId)) ? "auto" : "staging"); setPrinted(false);
   };
 
-  const parseScans = (actual, itemId, lpn) => {
+  const parseScans = (actual, itemId, lpn, lotCode) => {
     if (!requireSerial) {
-      return [{ unitId: `UNIT-${rand(100000, 999999)}`, po: active.po, itemId, level: trackingLevel, lpn, sn: "", imei: "", qty: actual, loc: plantStagingLoc(actualPlant), status: "Received" }];
+      return [{ unitId: `UNIT-${rand(100000, 999999)}`, po: active.po, itemId, lotCode, batch: lotCode, level: trackingLevel, lpn, sn: "", imei: "", qty: actual, loc: plantStagingLoc(actualPlant), status: "Received" }];
     }
     const rows = scanText.split(/\r?\n/).map((r) => r.trim()).filter(Boolean);
     if (!rows.length) {
-      return [{ unitId: `UNIT-${rand(100000, 999999)}`, po: active.po, itemId, level: trackingLevel, lpn, sn: `SN-${active.po}-${itemId.slice(-4)}-AUTO`, imei: `IMEI-${rand(100000000000000, 999999999999999)}`, qty: actual, loc: "RECV-DOCK", status: "Received" }];
+      return [{ unitId: `UNIT-${rand(100000, 999999)}`, po: active.po, itemId, lotCode, batch: lotCode, level: trackingLevel, lpn, sn: `SN-${active.po}-${itemId.slice(-4)}-AUTO`, imei: `IMEI-${rand(100000000000000, 999999999999999)}`, qty: actual, loc: "RECV-DOCK", status: "Received" }];
     }
     return rows.map((row, idx) => {
       const [snRaw, imeiRaw, levelRaw, qtyRaw] = row.split(/[,\t|]/).map((x) => x?.trim());
@@ -3265,6 +3312,8 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
         unitId: `UNIT-${Date.now()}-${idx}`,
         po: active.po,
         itemId,
+        lotCode,
+        batch: lotCode,
         level: levelRaw || trackingLevel,
         lpn,
         sn: snRaw || `SN-${active.po}-${idx + 1}`,
@@ -3298,22 +3347,23 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
           : `Plant Mismatch Reject: ส่งกลับ ${plantLabelOf(plannedPlant)}`
       : `Plant Match: ${plantLabelOf(actualPlant)}`;
     const finalRemark = isAgeReject ? `Reject อายุสินค้า: ${currentAgeCheck.message}` : isPlantReject ? plantRemark : `${remark} · ${plantRemark}`;
+    const receiveLotCode = makeLotCode({ itemId, receiveDate, status: isAgeReject || isPlantReject ? "REJECT" : remark, costCode: costCodeForItem(item, active.po) });
     setPoList((list) => list.map((p) => {
       if (p.po !== active.po) return p;
-      const lines = poLinesOf(p).map((l, i) => (i === lineIdx ? { ...l, actualQty: (isAgeReject || isPlantReject) ? 0 : actual, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", remark: finalRemark, status, trackingLevel, needSn: requireSerial ? l.needSn : false, needImei: requireSerial ? l.needImei : false } : l));
+      const lines = poLinesOf(p).map((l, i) => (i === lineIdx ? { ...l, actualQty: (isAgeReject || isPlantReject) ? 0 : actual, receiveDate, mfgDate, lotCode: receiveLotCode, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", remark: finalRemark, status, trackingLevel, needSn: requireSerial ? l.needSn : false, needImei: requireSerial ? l.needImei : false } : l));
       const allDone = lines.every((l) => l.status && l.status !== "Pending");
       const totalActual = lines.reduce((a, l) => a + (Number(l.actualQty) || 0), 0);
       return { ...p, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", lines, actualQty: totalActual, remark: allDone ? "รับครบทุก Line" : "รับบาง Line", status: allDone ? (lines.every((l) => l.status === "รับครบ") ? "รับครบ" : "รับไม่ครบ") : "Pending" };
     }));
     if (plantMismatch) {
-      addTx({ type: "Receiving Plant Mismatch", detail: `${active.po}: Planned ${plantLabelOf(plannedPlant)} แต่รับจริงที่ ${plantLabelOf(actualPlant)} · Decision: ${plantRemark}`, itemId, lot: `RCV-${active.po}`, fromLoc: plantStagingLoc(plannedPlant), toLoc: plantStagingLoc(actualPlant), loc: plantStagingLoc(actualPlant) });
+      addTx({ type: "Receiving Plant Mismatch", detail: `${active.po}: Planned ${plantLabelOf(plannedPlant)} แต่รับจริงที่ ${plantLabelOf(actualPlant)} · Decision: ${plantRemark}`, itemId, lot: receiveLotCode, lotCode: receiveLotCode, fromLoc: plantStagingLoc(plannedPlant), toLoc: plantStagingLoc(actualPlant), loc: plantStagingLoc(actualPlant) });
     }
     if (isAgeReject) {
-      addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ถูก Reject ตอนรับเข้า: ${currentAgeCheck.message} · Receive ${receiveDate} · MFG ${mfgDate}`, itemId, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: "REJECT", loc: "REJECT" });
+      addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ถูก Reject ตอนรับเข้า: ${currentAgeCheck.message} · Receive ${receiveDate} · MFG ${mfgDate}`, itemId, lot: receiveLotCode, lotCode: receiveLotCode, fromLoc: active.dock || "INBOUND-DOCK", toLoc: "REJECT", loc: "REJECT" });
       notify("Handheld Reject รับสินค้า", `${active.po} · ${item?.name}: ${currentAgeCheck.message}`, "danger");
     }
     if (isPlantReject) {
-      addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ไม่รับเข้าที่ ${plantLabelOf(actualPlant)} เพราะ PO ระบุ ${plantLabelOf(plannedPlant)} · ตีสินค้ากลับไปรับให้ถูก Plant`, itemId, lot: `RCV-${active.po}`, fromLoc: plantStagingLoc(actualPlant), toLoc: plantStagingLoc(plannedPlant), loc: "REJECT" });
+      addTx({ type: "Receive Reject", detail: `${active.po} · ${item?.name} ไม่รับเข้าที่ ${plantLabelOf(actualPlant)} เพราะ PO ระบุ ${plantLabelOf(plannedPlant)} · ตีสินค้ากลับไปรับให้ถูก Plant`, itemId, lot: receiveLotCode, lotCode: receiveLotCode, fromLoc: plantStagingLoc(actualPlant), toLoc: plantStagingLoc(plannedPlant), loc: "REJECT" });
       notify("Reject Plant Mismatch", `${active.po}: ตีสินค้ากลับไป ${plantLabelOf(plannedPlant)}`, "danger");
     }
     if (!isAgeReject && !isPlantReject && actual > 0 && remark !== "ปฏิเสธรับ (Reject)") {
@@ -3322,15 +3372,15 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
       const stagingLoc = plantStagingLoc(actualPlant, stockStatus);
       const finalLoc = shouldBypassPrework ? "PREWORK" : stagingLoc;
       const newKey = Date.now() + Math.random();
-      setStock((list) => [...list, { key: newKey, itemId, batch: `RCV-${active.po}`, lpn, loc: finalLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", stickerStatus: shouldBypassPrework ? "IN_PROGRESS" : item?.stickerRequired ? "PENDING" : undefined, preworkBypass: shouldBypassPrework, preworkBill: shouldBypassPrework ? `PW-BP-${active.po}-${lineIdx + 1}` : undefined }]);
-      setSerialUnits((list) => [...parseScans(actual, itemId, lpn), ...list]);
-      addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} รับจริง ${actual}/${expected} · Planned ${plantLabelOf(plannedPlant)} · Actual ${plantLabelOf(actualPlant)} · MFG ${mfgDate} · อายุ ${currentAgeCheck.ageDays} วัน → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
+      setStock((list) => [...list, { key: newKey, itemId, batch: receiveLotCode, lotCode: receiveLotCode, lpn, loc: finalLoc, qty: actual, status: stockStatus, age: currentAgeCheck.ageDays || 0, receiveDate, mfgDate, receivingAgeDays: currentAgeCheck.ageDays, receivingAgeRule: currentAgeCheck.rule, plannedPlant, actualPlant, plantDecision: plantMismatch ? plantDecision : "match", stickerStatus: shouldBypassPrework ? "IN_PROGRESS" : item?.stickerRequired ? "PENDING" : undefined, preworkBypass: shouldBypassPrework, preworkBill: shouldBypassPrework ? `PW-BP-${active.po}-${lineIdx + 1}` : undefined }]);
+      setSerialUnits((list) => [...parseScans(actual, itemId, lpn, receiveLotCode), ...list]);
+      addTx({ type: "Receive", detail: `${active.po} · ${lpn} · ${itemOf(itemId)?.name} · Lot ${receiveLotCode} · รับจริง ${actual}/${expected} · Planned ${plantLabelOf(plannedPlant)} · Actual ${plantLabelOf(actualPlant)} · MFG ${mfgDate} · อายุ ${currentAgeCheck.ageDays} วัน → เข้า Staging Area ${stagingLoc} รอ QC/Putaway`, itemId, lpn, lot: receiveLotCode, lotCode: receiveLotCode, fromLoc: active.dock || "INBOUND-DOCK", toLoc: stagingLoc, loc: stagingLoc });
       if (shouldBypassPrework) {
         const billId = `PW-BP-${active.po}-${lineIdx + 1}`;
         const nextToLoc = nextDestinationAfterPreworkOf(item);
         const task = { id: billId, order: active.po, itemId, qtyRequired: actual, qtyDone: 0, source: "Inbound Bypass", machineNo: "", workDate: new Date().toISOString().slice(0, 10), status: "At Prework", note: `${defaultPreworkFlowOf(item)} · Bypass จากรับเข้า ไม่ต้อง Putaway ปกติ`, stockKey: newKey, lpn, fromLoc: stagingLoc, toLoc: "PREWORK", system: "Manual", moveStatus: "Bypassed", movedAt: new Date().toISOString(), stickerSize: stickerSizeForItem(item), priorityTone: "risk", nextMoveLabel: nextToLoc === "PICK-PACK" ? "By pass move to picking station" : "Move to Putaway / Miniload", nextToLoc };
         setStickerTasks((list) => list.some((t) => t.id === billId) ? list : [task, ...list]);
-        addTx({ type: "Bypass Putaway to Prework", detail: `${active.po} · ${lpn}: QC Pass/Receive แล้ว Bypass ${stagingLoc} → PREWORK เพื่อ ${defaultPreworkFlowOf(item)} · เปิด Bill ${billId}`, itemId, lpn, lot: `RCV-${active.po}`, fromLoc: stagingLoc, toLoc: "PREWORK", loc: "PREWORK" });
+        addTx({ type: "Bypass Putaway to Prework", detail: `${active.po} · ${lpn}: Lot ${receiveLotCode} · QC Pass/Receive แล้ว Bypass ${stagingLoc} → PREWORK เพื่อ ${defaultPreworkFlowOf(item)} · เปิด Bill ${billId}`, itemId, lpn, lot: receiveLotCode, lotCode: receiveLotCode, fromLoc: stagingLoc, toLoc: "PREWORK", loc: "PREWORK" });
       }
     }
     setPrinted(true);
@@ -3369,6 +3419,11 @@ function HandheldReceiving({ poList, setPoList, stock = [], setStock, addTx, ser
                 {poLinesOf(active).map((l, i) => <span key={i} className={`chip ${lineIdx === i ? "active" : ""}`} onClick={() => switchLine(i)}>Line {i + 1}</span>)}
               </div>
               <div className="item-heading"><ItemCell itemId={activeLine?.itemId} /></div>
+              <div className="lot-preview-card">
+                <div><span>Part 1 · SYNNEX ID</span><b className="mono">{activeLine?.itemId || active.itemId}</b></div>
+                <ArrowRight size={14} />
+                <div><span>Part 2 · LOT</span><b className="mono">{lotPreview}</b><small>{lotStatusLabelOf(parseLotCode(lotPreview).statusCode)} · Cost {parseLotCode(lotPreview).costCode}</small></div>
+              </div>
               <div className="storage-mini-card">
                 <div className="storage-mini-title"><Warehouse size={14} /> Storage / Plant Control</div>
                 <div className="storage-plant-compare">
@@ -3472,10 +3527,10 @@ function ReceivingSummary({ poList, serialUnits = [] }) {
       </div>
       <div className="table-wrap">
         <table>
-          <thead><tr><th>PO</th><th>Supplier</th><th>Lines</th><th>คาดรับ</th><th>รับจริง</th><th>SN/IMEI</th><th>หมายเหตุ</th><th>สถานะ</th></tr></thead>
+          <thead><tr><th>PO</th><th>Supplier</th><th>Lines</th><th>Lot</th><th>คาดรับ</th><th>รับจริง</th><th>SN/IMEI</th><th>หมายเหตุ</th><th>สถานะ</th></tr></thead>
           <tbody>
             {poList.map((p) => (
-              <tr key={p.po}><td className="mono">{p.po}</td><td>{p.supplier}</td><td>{poLinesOf(p).length}</td><td>{poExpectedQty(p)}</td><td>{poActualQty(p) || "—"}</td><td>{serialUnits.filter((u) => u.po === p.po).length}</td><td>{p.remark || "—"}</td>
+              <tr key={p.po}><td className="mono">{p.po}</td><td>{p.supplier}</td><td>{poLinesOf(p).length}</td><td className="mono">{[...new Set(poLinesOf(p).map((l) => l.lotCode).filter(Boolean))].join(", ") || "-"}</td><td>{poExpectedQty(p)}</td><td>{poActualQty(p) || "—"}</td><td>{serialUnits.filter((u) => u.po === p.po).length}</td><td>{p.remark || "—"}</td>
                 <td><span className={`tag-status ${p.status === "รับครบ" ? "Arrived" : p.status === "Pending" ? "Booked" : "Hold"}`}>{p.status}</span></td></tr>
             ))}
           </tbody>
@@ -3572,10 +3627,10 @@ function InventoryTransaction({ stock, setStock, addTx, txLog, notify, confirmAc
       let next = list.map((r) => (r.key === moveRow.key ? { ...r, qty: r.qty - q } : r)).filter((r) => r.qty > 0);
       const existing = next.find((r) => r.itemId === moveRow.itemId && r.batch === moveRow.batch && r.loc === toLoc && r.status === newStatus);
       if (existing) next = next.map((r) => (r === existing ? { ...r, qty: r.qty + q } : r));
-      else next = [...next, { key: Date.now(), itemId: moveRow.itemId, batch: moveRow.batch, lpn: moveRow.lpn, loc: toLoc, qty: q, status: newStatus, age: moveRow.age }];
+      else next = [...next, { key: Date.now(), itemId: moveRow.itemId, batch: lotCodeOf(moveRow) || moveRow.batch, lotCode: lotCodeOf(moveRow), costCode: moveRow.costCode, receiveDate: moveRow.receiveDate, mfgDate: moveRow.mfgDate, lpn: moveRow.lpn, loc: toLoc, qty: q, status: newStatus, age: moveRow.age, stickerStatus: moveRow.stickerStatus }];
       return next;
     });
-    addTx({ type: moveRow.loc === toLoc ? "Adjust" : "Move", detail: `${itemOf(moveRow.itemId)?.name} · ${moveRow.batch} · ${q} หน่วย: ${moveRow.loc} (${moveRow.status}) → ${toLoc} (${newStatus})${remark ? " · " + remark : ""}`, itemId: moveRow.itemId, lpn: moveRow.lpn, lot: moveRow.batch, fromLoc: moveRow.loc, toLoc });
+    addTx({ type: moveRow.loc === toLoc ? "Adjust" : "Move", detail: `${itemOf(moveRow.itemId)?.name} · Lot ${lotCodeOf(moveRow) || "-"} · ${q} หน่วย: ${moveRow.loc} (${moveRow.status}) → ${toLoc} (${newStatus})${remark ? " · " + remark : ""}`, itemId: moveRow.itemId, lpn: moveRow.lpn, lot: lotCodeOf(moveRow), lotCode: lotCodeOf(moveRow), fromLoc: moveRow.loc, toLoc });
     notify("บันทึก Transaction สำเร็จ", `${moveRow.lpn} ถูกบันทึกเวลาและกิจกรรมแล้ว`, "success");
     setMoveRow(null);
   };
@@ -3591,7 +3646,7 @@ function InventoryTransaction({ stock, setStock, addTx, txLog, notify, confirmAc
           <div className="field"><label>SYNNEX ID</label><input value={filters.synnexId} onChange={(e) => setFilter("synnexId", e.target.value)} placeholder="6425011001" /></div>
           <div className="field"><label>ชื่อสินค้า</label><input value={filters.itemName} onChange={(e) => setFilter("itemName", e.target.value)} placeholder="Notebook / Mouse" /></div>
           <div className="field"><label>Location</label><input value={filters.loc} onChange={(e) => setFilter("loc", e.target.value)} placeholder="A-03-12-B" /></div>
-          <div className="field"><label>Lot</label><input value={filters.lot} onChange={(e) => setFilter("lot", e.target.value)} placeholder="LOT-1001-A" /></div>
+          <div className="field"><label>Lot</label><input value={filters.lot} onChange={(e) => setFilter("lot", e.target.value)} placeholder="Lot20260826-01-A001" /></div>
           <div className="field"><label>Brand</label><input value={filters.brand} onChange={(e) => setFilter("brand", e.target.value)} placeholder="ASUS" /></div>
           <div className="field"><label>Size</label><select value={filters.size} onChange={(e) => setFilter("size", e.target.value)}><option value="">ทั้งหมด</option>{SIZE_GROUPS.map((s) => <option key={s.code}>{s.code}</option>)}</select></div>
           <div className="field"><label>Plant / WH</label><select value={filters.plant} onChange={(e) => setFilter("plant", e.target.value)}><option value="">ทุก Plant</option>{PLANTS.map((p) => <option key={p.id} value={p.id}>{p.erpCode} · {p.name}</option>)}</select></div>
@@ -3605,7 +3660,7 @@ function InventoryTransaction({ stock, setStock, addTx, txLog, notify, confirmAc
       </div>
       <div className="table-wrap" style={{ marginBottom: 24 }}>
         <table>
-          <thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Size</th><th>Sticker</th><th>Batch</th><th>Location</th><th>Last Activity Time</th><th>Last User</th><th>Plant / WH</th><th>Floor</th><th>คงเหลือ</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Last Activity Time</th><th>Last User</th><th>Plant / WH</th><th>Floor</th><th>คงเหลือ</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {filteredStockRows.map((r) => {
               const l = locOf(r.loc);
@@ -3617,7 +3672,7 @@ function InventoryTransaction({ stock, setStock, addTx, txLog, notify, confirmAc
                   <td>{itemOf(r.itemId)?.name}</td>
                   <td><span className={sizeChipClass(sizeGroupOf(itemOf(r.itemId)).code)}>{sizeGroupOf(itemOf(r.itemId)).code}</span></td>
                   <td><span className={`scan-step ${stickerStateOfStock(r).ok ? "done" : "active"}`}>{stickerStateOfStock(r).label}</span></td>
-                  <td className="mono">{r.batch}</td>
+                  <td className="mono">{lotCodeOf(r) || "-"}</td>
                   <td className="mono">{r.loc}</td>
                   <td className="mono">{lastTx?.t ? lastTx.t.toLocaleString("th-TH") : "—"}</td>
                   <td>{lastTx?.user || "seed"}</td>
@@ -3641,7 +3696,7 @@ function InventoryTransaction({ stock, setStock, addTx, txLog, notify, confirmAc
           <div className="field"><label>Filter by Month</label><input type="month" value={filters.month} onChange={(e) => setFilter("month", e.target.value)} /></div>
           <div className="field"><label>Filter by SYNNEX ID</label><input value={filters.synnexId} onChange={(e) => setFilter("synnexId", e.target.value)} placeholder="6425011001" /></div>
           <div className="field"><label>Filter by Item Name</label><input value={filters.itemName} onChange={(e) => setFilter("itemName", e.target.value)} placeholder="Notebook / Mouse" /></div>
-          <div className="field"><label>Filter by Lot</label><input value={filters.lot} onChange={(e) => setFilter("lot", e.target.value)} placeholder="LOT-1001-A" /></div>
+          <div className="field"><label>Filter by Lot</label><input value={filters.lot} onChange={(e) => setFilter("lot", e.target.value)} placeholder="Lot20260826-01-A001" /></div>
           <div className="field"><label>Filter by Location</label><input value={filters.loc} onChange={(e) => setFilter("loc", e.target.value)} placeholder="A-03-12-B" /></div>
           <div className="field"><label>Filter by Brand</label><input value={filters.brand} onChange={(e) => setFilter("brand", e.target.value)} placeholder="ASUS" /></div>
           <div className="field"><label>Filter by Size</label><select value={filters.size} onChange={(e) => setFilter("size", e.target.value)}><option value="">ทั้งหมด</option>{SIZE_GROUPS.map((s) => <option key={s.code}>{s.code}</option>)}</select></div>
@@ -3702,7 +3757,7 @@ function InventoryTransaction({ stock, setStock, addTx, txLog, notify, confirmAc
       {moveRow && (
         <Modal onClose={() => setMoveRow(null)} width={440}>
           <h2>ย้ายสถานะ / โยกย้ายสินค้า</h2>
-          <div className="kpi-sub" style={{ marginBottom: 14 }}>{moveRow.itemId} · {itemOf(moveRow.itemId)?.name} · {moveRow.batch} · ต้นทาง {moveRow.loc}</div>
+          <div className="kpi-sub" style={{ marginBottom: 14 }}>{moveRow.itemId} · {itemOf(moveRow.itemId)?.name} · Lot {lotCodeOf(moveRow) || "-"} · ต้นทาง {moveRow.loc}</div>
           <div className="field"><label>จำนวนที่ต้องการย้าย (สูงสุด {moveRow.qty})</label><input type="number" value={moveQty} onChange={(e) => setMoveQty(e.target.value)} /></div>
           <div className="field"><label>Location ปลา·ҧ</label><select value={toLoc} onChange={(e) => setToLoc(e.target.value)}>{LOCATIONS.map((l) => <option key={l.code} value={l.code}>{l.code}</option>)}</select></div>
           <div className="field"><label>Status ใหม่</label><select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>{STATUS_LIST.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></div>
@@ -3757,12 +3812,12 @@ function CycleCount({ cycleCounts, setCycleCounts, stock, setStock, addTx }) {
       {tab === "today" && (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Task</th><th>Location</th><th>SYNNEX ID</th><th>Item Name</th><th>ABC</th><th>Batch</th><th>สถานะ</th></tr></thead>
+            <thead><tr><th>Task</th><th>Location</th><th>SYNNEX ID</th><th>Item Name</th><th>ABC</th><th>Lot</th><th>สถานะ</th></tr></thead>
             <tbody>
               {cycleCounts.map((c) => (
                 <tr key={c.id}>
                   <td className="mono">{c.id}</td><td className="mono">{c.loc}</td><td className="mono">{c.itemId}</td><td>{itemOf(c.itemId)?.name}</td>
-                  <td><span className={`badge ${itemOf(c.itemId)?.abc}`}>{itemOf(c.itemId)?.abc}</span></td><td className="mono">{c.batch}</td>
+                  <td><span className={`badge ${itemOf(c.itemId)?.abc}`}>{itemOf(c.itemId)?.abc}</span></td><td className="mono">{lotCodeOf(c) || "-"}</td>
                   <td><span className={`tag-status ${c.status === "รอนับ" ? "Booked" : c.status === "นับตรง" ? "Completed" : "Hold"}`}>{c.status}</span></td>
                 </tr>
               ))}
@@ -3780,7 +3835,7 @@ function CycleCount({ cycleCounts, setCycleCounts, stock, setStock, addTx }) {
                 <div className="kpi-sub">Blind Count — ไม่แสดงจำนวนในระบบ</div>
                 <div className="item-heading"><ItemCell itemId={current.itemId} /></div>
                 <div className="recall-row"><span>Location</span><span className="mono" style={{ color: "var(--teal)" }}>{current.loc}</span></div>
-                <div className="recall-row"><span>Batch</span><span className="mono">{current.batch}</span></div>
+                <div className="recall-row"><span>Lot</span><span className="mono">{lotCodeOf(current) || "-"}</span></div>
                 <div className="field" style={{ marginTop: 12 }}><label>จำนวนที่นับได้จริง</label><input type="number" value={countedQtyInput} onChange={(e) => setCountedQtyInput(e.target.value)} placeholder="สแกน/กรอกจำนวนที่นับได้" /></div>
                 <button className="btn" style={{ width: "100%", justifyContent: "center", marginTop: 6 }} onClick={submitCount}><CheckCircle2 size={13} /> ยืนยันผลการนับ</button>
                 <div className="kpi-sub" style={{ textAlign: "center", marginTop: 10 }}>คงเหลือในรอบนับ {pending.length - 1} รายการ</div>
@@ -3856,7 +3911,7 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
       else next = [...next, { ...row, key: Date.now() + Math.random(), loc: toLoc, qty: q, status: toStatus }];
       return next;
     });
-    addTx({ type: "Putaway", detail: `Putaway: ${itemOf(row.itemId)?.name} · ${row.lpn} · ${q} หน่วย จาก ${row.loc} → ${toLoc} (${toStatus})`, itemId: row.itemId, lpn: row.lpn, lot: row.batch, fromLoc: row.loc, toLoc });
+    addTx({ type: "Putaway", detail: `Putaway: ${itemOf(row.itemId)?.name} · ${row.lpn} · ${q} หน่วย จาก ${row.loc} → ${toLoc} (${toStatus})`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), fromLoc: row.loc, toLoc });
     return true;
   };
   const submitPutaway = () => {
@@ -3880,7 +3935,7 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
       return next;
     });
     setStickerTasks((list) => list.map((t) => (t.id === task.id ? { ...t, moveStatus: "Moved", status: "At Prework", movedAt: new Date().toISOString() } : t)));
-    addTx({ type: task.system === "ASRS" ? "ASRS to Prework Move" : "Prework Move", detail: `${task.id}: พนักงาน Scan Move ${task.fromLoc} → PREWORK · ${task.itemId} · ${q} ชิ้น`, itemId: task.itemId, lpn: task.lpn, lot: source.batch, fromLoc: task.fromLoc, toLoc: "PREWORK", loc: "PREWORK" });
+    addTx({ type: task.system === "ASRS" ? "ASRS to Prework Move" : "Prework Move", detail: `${task.id}: พนักงาน Scan Move ${task.fromLoc} → PREWORK · ${task.itemId} · ${q} ชิ้น`, itemId: task.itemId, lpn: task.lpn, lot: lotCodeOf(source), lotCode: lotCodeOf(source), fromLoc: task.fromLoc, toLoc: "PREWORK", loc: "PREWORK" });
     notify("Move Order สำเร็จ", `${task.id} ย้ายสินค้าเข้า PREWORK แล้ว`, "success");
   };
   const completePostStickerMove = (task) => {
@@ -3900,7 +3955,7 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
       return next;
     });
     setStickerTasks((list) => list.map((t) => (t.id === task.id ? { ...t, nextMoveStatus: "Moved", finalLoc: toLoc, status: "Completed & Moved", movedOutAt: new Date().toISOString() } : t)));
-    addTx({ type: "Prework Out Move", detail: `${task.id}: Sticker Complete แล้ว Move PREWORK → ${toLoc} · ${task.itemId} · ${q} ชิ้น`, itemId: task.itemId, lpn: task.lpn, fromLoc: "PREWORK", toLoc, loc: toLoc });
+    addTx({ type: "Prework Out Move", detail: `${task.id}: Sticker Complete แล้ว Move PREWORK → ${toLoc} · ${task.itemId} · ${q} ชิ้น`, itemId: task.itemId, lpn: task.lpn, lot: lotCodeOf(source), lotCode: lotCodeOf(source), fromLoc: "PREWORK", toLoc, loc: toLoc });
     notify("Move หลังติดสติ๊กเกอร์สำเร็จ", `${task.id} ถูกย้ายจาก PREWORK ไป ${toLoc}`, "success");
   };
   const runHandheldCommand = () => {
@@ -3931,7 +3986,7 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
       else next = [...next, { ...moveRow, key: Date.now() + Math.random(), loc: moveForm.toLoc, qty: q, status: moveForm.toStatus }];
       return next;
     });
-    addTx({ type: "Move", detail: `Move to Location: ${itemOf(moveRow.itemId)?.name} · ${q} หน่วย: ${moveRow.loc} → ${moveForm.toLoc} (${moveForm.toStatus})`, itemId: moveRow.itemId, lpn: moveRow.lpn, lot: moveRow.batch, fromLoc: moveRow.loc, toLoc: moveForm.toLoc });
+    addTx({ type: "Move", detail: `Move to Location: ${itemOf(moveRow.itemId)?.name} · ${q} หน่วย: ${moveRow.loc} → ${moveForm.toLoc} (${moveForm.toStatus})`, itemId: moveRow.itemId, lpn: moveRow.lpn, lot: lotCodeOf(moveRow), lotCode: lotCodeOf(moveRow), fromLoc: moveRow.loc, toLoc: moveForm.toLoc });
     setMoveRow(null);
   };
 
@@ -3947,7 +4002,7 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
       else next = [...next, { ...sourceRow, key: Date.now() + Math.random(), lpn: lpnForm.targetLpn, qty: q }];
       return next;
     });
-    addTx({ type: "LPN Transfer", detail: `ย้าย ${itemOf(sourceRow.itemId)?.name} ${q} หน่วย จาก LPN ${sourceRow.lpn} → LPN ${lpnForm.targetLpn}`, itemId: sourceRow.itemId, lpn: sourceRow.lpn, targetLpn: lpnForm.targetLpn, lot: sourceRow.batch, loc: sourceRow.loc });
+    addTx({ type: "LPN Transfer", detail: `ย้าย ${itemOf(sourceRow.itemId)?.name} ${q} หน่วย จาก LPN ${sourceRow.lpn} → LPN ${lpnForm.targetLpn}`, itemId: sourceRow.itemId, lpn: sourceRow.lpn, targetLpn: lpnForm.targetLpn, lot: lotCodeOf(sourceRow), lotCode: lotCodeOf(sourceRow), loc: sourceRow.loc });
     setLpnForm({ sourceKey: "", targetLpn: "", qty: "" });
   };
 
@@ -3968,7 +4023,7 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
           {staging.map((r) => (
             <div className="po-row" key={r.key}>
               <ArrowDownToLine size={18} color="var(--teal)" />
-              <div className="po-info"><div className="sup"><span className="mono">{r.itemId}</span> · {itemOf(r.itemId)?.name} <span className="po-id">· {r.lpn}</span></div><div className="meta">Batch {r.batch} · {r.qty} หน่วย · <StatusBadge code={r.status} /></div></div>
+              <div className="po-info"><div className="sup"><span className="mono">{r.itemId}</span> · {itemOf(r.itemId)?.name} <span className="po-id">· {r.lpn}</span></div><div className="meta">Lot {lotCodeOf(r) || "-"} · {r.qty} หน่วย · <StatusBadge code={r.status} /></div></div>
               <button className="btn" onClick={() => openPutaway(r)}>Putaway <ArrowRight size={13} /></button>
             </div>
           ))}
@@ -4050,11 +4105,11 @@ function PutawayMove({ stock, setStock, stickerTasks = [], setStickerTasks = () 
       {tab === "move" && (
         <div className="table-wrap">
           <table>
-            <thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Batch</th><th>Location</th><th>คงเหลือ</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>Location</th><th>คงเหลือ</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {stock.map((r) => (
                 <tr key={r.key}>
-                  <td className="mono">{r.lpn}</td><td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name}</td><td className="mono">{r.batch}</td><td className="mono">{r.loc}</td><td>{r.qty.toLocaleString()}</td><td><StatusBadge code={r.status} /></td>
+                  <td className="mono">{r.lpn}</td><td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name}</td><td className="mono">{lotCodeOf(r) || "-"}</td><td className="mono">{r.loc}</td><td>{r.qty.toLocaleString()}</td><td><StatusBadge code={r.status} /></td>
                   <td><button className="btn secondary" onClick={() => openMove(r)}><MoveRight size={12} /> ย้าย</button></td>
                 </tr>
               ))}
@@ -4408,7 +4463,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
           if (!r) continue;
           const take = Math.min(need, Number(r.qty || 0), Number(candidate.limit || 0));
           if (take <= 0) continue;
-          sources.push({ loc: r.loc || "PICK-PACK", system: locOf(r.loc)?.system || "Manual", qty: take, pickedQty: 0, lpn: r.lpn || "-", warehouse: locOf(r.loc)?.plant || "BKK1", onhandBefore: r.qty, utilPct: locUtil(r.loc).pct });
+          sources.push({ loc: r.loc || "PICK-PACK", system: locOf(r.loc)?.system || "Manual", qty: take, pickedQty: 0, lpn: r.lpn || "-", lot: lotCodeOf(r), lotCode: lotCodeOf(r), warehouse: locOf(r.loc)?.plant || "BKK1", onhandBefore: r.qty, utilPct: locUtil(r.loc).pct });
           need -= take;
           next = next.map((row) => (row === r ? { ...row, qty: row.qty - take } : row));
           next = [...next, { ...r, key: Date.now() + Math.random(), qty: take, status: "ALLOC", allocatedFor: order.id }];
@@ -4470,13 +4525,13 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
         if (s.released) return;
         if (s.system === "ASRS" || s.system === "Miniload") {
           const jobId = `RB-${rand(1000, 9999)}`;
-          setRobotJobs((jobs) => [...jobs, { id: jobId, orderId: order.id, itemId: l.itemId, loc: s.loc, system: s.system, qty: s.qty, status: "Command Sent" }]);
-          advanceJob(jobId, ["Command Sent", "Retrieving", "Delivered to Station"], () => applyPick({ orderId: order.id, itemId: l.itemId, loc: s.loc, qty: s.qty }));
-          addTx({ type: "Release", detail: `${order.id}: Release ${sourcesMode === "partial" ? "Partial" : "Order"} → ส่งคำสั่งไปยัง ${s.system} Controller ดึง ${itemOf(l.itemId)?.name} ${s.qty} หน่วย จาก ${s.loc}`, itemId: l.itemId });
+          setRobotJobs((jobs) => [...jobs, { id: jobId, orderId: order.id, itemId: l.itemId, loc: s.loc, lot: s.lot || s.lotCode || "-", lotCode: s.lot || s.lotCode || "-", system: s.system, qty: s.qty, status: "Command Sent" }]);
+          advanceJob(jobId, ["Command Sent", "Retrieving", "Delivered to Station"], () => applyPick({ orderId: order.id, itemId: l.itemId, loc: s.loc, qty: s.qty, lot: s.lot || s.lotCode || "-" }));
+          addTx({ type: "Release", detail: `${order.id}: Release ${sourcesMode === "partial" ? "Partial" : "Order"} → ส่งคำสั่งไปยัง ${s.system} Controller ดึง ${itemOf(l.itemId)?.name} ${s.qty} หน่วย จาก ${s.loc} Lot ${s.lot || s.lotCode || "-"}`, itemId: l.itemId, lot: s.lot || s.lotCode || "-", lotCode: s.lot || s.lotCode || "-" });
         } else {
           const taskId = `PT-${rand(6000, 9999)}`;
-          setPickTasks((list) => [...list, { id: taskId, order: order.id, itemId: l.itemId, qty: s.qty, loc: s.loc, strategy: "Person-to-Goods (PTG)", status: "Assigned", assignee: "รอมอบหมาย", released: true, releasedAt: new Date().toISOString() }]);
-          addTx({ type: "Release", detail: `${order.id}: Release ${sourcesMode === "partial" ? "Partial" : "Order"} → สร้าง Pick Task ${taskId} ให้พนักงานหยิบ ${itemOf(l.itemId)?.name} ${s.qty} หน่วย ที่ ${s.loc}`, itemId: l.itemId });
+          setPickTasks((list) => [...list, { id: taskId, order: order.id, itemId: l.itemId, qty: s.qty, loc: s.loc, lpn: s.lpn, lot: s.lot || s.lotCode || "-", lotCode: s.lot || s.lotCode || "-", strategy: "Person-to-Goods (PTG)", status: "Assigned", assignee: "รอมอบหมาย", released: true, releasedAt: new Date().toISOString() }]);
+          addTx({ type: "Release", detail: `${order.id}: Release ${sourcesMode === "partial" ? "Partial" : "Order"} → สร้าง Pick Task ${taskId} ให้พนักงานหยิบ ${itemOf(l.itemId)?.name} ${s.qty} หน่วย ที่ ${s.loc} Lot ${s.lot || s.lotCode || "-"}`, itemId: l.itemId, lot: s.lot || s.lotCode || "-", lotCode: s.lot || s.lotCode || "-" });
         }
       });
     });
@@ -4615,8 +4670,8 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
   };
   const allocationLineRows = filteredOrders.flatMap((o) => {
     const lines = normalizedLinesOf(o);
-    return lines.flatMap((l) => (l.sources?.length ? l.sources : [{ loc: "-", qty: l.qty || 0, system: "-", lpn: "-", pickedQty: 0 }]).map((s) => ({
-      orderId: o.id, customer: o.customer, priority: o.priority, status: o.status, itemId: l.itemId, itemName: itemOf(l.itemId)?.name || "-", loc: s.loc, lpn: s.lpn || "-", qty: s.qty, picked: s.pickedQty || 0, worker: s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === o.id && t.itemId === l.itemId)?.assignee || "Manual Picker"), system: s.system,
+    return lines.flatMap((l) => (l.sources?.length ? l.sources : [{ loc: "-", qty: l.qty || 0, system: "-", lpn: "-", lot: "-", pickedQty: 0 }]).map((s) => ({
+      orderId: o.id, customer: o.customer, priority: o.priority, status: o.status, itemId: l.itemId, itemName: itemOf(l.itemId)?.name || "-", lot: s.lot || s.lotCode || "-", loc: s.loc, lpn: s.lpn || "-", qty: s.qty, picked: s.pickedQty || 0, worker: s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === o.id && t.itemId === l.itemId)?.assignee || "Manual Picker"), system: s.system,
     })));
   });
   const allocationDashboardStats = {
@@ -4716,7 +4771,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
       <div className="section-title">Order Queue for Allocation</div>
       <div className="table-wrap" style={{ marginBottom: 14 }}>
         <table>
-          <thead><tr><th>Order</th><th>Customer</th><th>Priority</th><th>Channel</th><th>Route</th><th>Region</th><th>Sales Sent</th><th>Ship Seq</th><th>Lines</th><th>Total Qty</th><th>Status</th><th>Stock Check</th><th>Order Progress</th><th></th></tr></thead>
+          <thead><tr><th>Order</th><th>Customer</th><th>Priority</th><th>Channel</th><th>Route</th><th>Region</th><th>Sales Sent</th><th>Ship Seq</th><th>Lines</th><th>Lot</th><th>Total Qty</th><th>Status</th><th>Stock Check</th><th>Order Progress</th><th></th></tr></thead>
           <tbody>
             {filteredOrders.map((o) => {
               const lines = orderLinesOf(o);
@@ -4725,7 +4780,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
               const stockCheck = p.remainingQty > 0 || o.status === "Backorder" || o.status === "Partial" ? `ไม่พอ ${p.remainingQty}` : p.allocatedQty > 0 ? "เพียงพอ" : "ยังไม่ Allocate";
               return (
                 <tr key={o.id}>
-                  <td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td>{o.priority || "Normal"}</td><td>{o._meta.channel}</td><td>{o._meta.route}</td><td>{o._meta.region}</td><td className="mono">{o._meta.salesSentAt}</td><td>{o._meta.shipSeq}</td><td>{lines.length}</td><td>{p.originalQty || lines.reduce((a, l) => a + Number(l.qty || 0), 0)}</td><td><OrderStatusPill status={o.status} /></td><td>{stockCheck}</td><td>{utilizationBar(progress)}</td><td><button className="btn secondary" onClick={() => setDetailOrderId(o.id)}><ArrowRight size={12} /> รายละเอียด / Allocate</button></td>
+                  <td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td>{o.priority || "Normal"}</td><td>{o._meta.channel}</td><td>{o._meta.route}</td><td>{o._meta.region}</td><td className="mono">{o._meta.salesSentAt}</td><td>{o._meta.shipSeq}</td><td>{lines.length}</td><td className="mono">{[...new Set((o.lines || []).flatMap((l) => (l.sources || []).map((s) => s.lot || s.lotCode)).filter(Boolean))].join(", ") || "-"}</td><td>{p.originalQty || lines.reduce((a, l) => a + Number(l.qty || 0), 0)}</td><td><OrderStatusPill status={o.status} /></td><td>{stockCheck}</td><td>{utilizationBar(progress)}</td><td><button className="btn secondary" onClick={() => setDetailOrderId(o.id)}><ArrowRight size={12} /> รายละเอียด / Allocate</button></td>
                 </tr>
               );
             })}
@@ -4735,8 +4790,8 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
       <div className="section-title">Allocation Line Overview</div>
       <div className="table-wrap" style={{ marginBottom: 14 }}>
         <table>
-          <thead><tr><th>Order</th><th>Customer</th><th>Priority</th><th>SYNNEX ID</th><th>Item Name</th><th>Location</th><th>LPN</th><th>Qty to Pick</th><th>Picked</th><th>Picker / System</th><th>Status</th></tr></thead>
-          <tbody>{allocationLineRows.map((r, idx) => <tr key={`${r.orderId}-${r.itemId}-${r.loc}-${idx}`}><td className="mono">{r.orderId}</td><td>{r.customer}</td><td>{r.priority}</td><td className="mono">{r.itemId}</td><td>{r.itemName}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn}</td><td>{r.qty}</td><td>{r.picked}</td><td>{r.worker}</td><td><OrderStatusPill status={r.status} /></td></tr>)}</tbody>
+          <thead><tr><th>Order</th><th>Customer</th><th>Priority</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>Location</th><th>LPN</th><th>Qty to Pick</th><th>Picked</th><th>Picker / System</th><th>Status</th></tr></thead>
+          <tbody>{allocationLineRows.map((r, idx) => <tr key={`${r.orderId}-${r.itemId}-${r.loc}-${idx}`}><td className="mono">{r.orderId}</td><td>{r.customer}</td><td>{r.priority}</td><td className="mono">{r.itemId}</td><td>{r.itemName}</td><td className="mono">{r.lot}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn}</td><td>{r.qty}</td><td>{r.picked}</td><td>{r.worker}</td><td><OrderStatusPill status={r.status} /></td></tr>)}</tbody>
         </table>
       </div>
 
@@ -4939,7 +4994,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                 <div className="kpi-sub" style={{ marginBottom: 10 }}>แสดง Stock ทุก Location ของสินค้าใน Order นี้ โดย Onhand Qty คือจำนวนที่เหลือให้จ่ายได้หลังหักยอดที่ Allocate ให้ Order นี้แล้ว</div>
                 <div className="table-wrap" style={{ marginBottom: 14 }}>
                   <table>
-                    <thead><tr><th>เลือก</th><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Order Qty</th><th>Allocated This Order</th><th>Remaining</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
+                    <thead><tr><th>เลือก</th><th>Allocate Qty</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>Plant</th><th>Floor</th><th>Location</th><th>LPN</th><th>Onhand Qty</th><th>Order Qty</th><th>Allocated This Order</th><th>Remaining</th><th>System</th><th>Pallet/Basket</th><th>Utilize</th><th>Sticker</th></tr></thead>
                     <tbody>
                       {onhandRows.map((r) => {
                         const canPick = r.status === "AVL" && r.canAllocate;
@@ -4950,7 +5005,7 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                               {canPick ? <input type="checkbox" checked={!!sourceChecked[pickKey]} onChange={(e) => toggleSource(detailOrder, r, e.target.checked)} /> : r.status === "ALLOC" ? <span className="scan-step done">จองแล้ว</span> : <span className="scan-step" style={{ color: "var(--danger)", background: "rgba(241,91,113,.10)" }}>{r.blockReason || "Block"}</span>}
                             </td>
                             <td style={{ minWidth: 92 }}>{canPick ? <input type="number" min="0" max={r.qty} value={sourcePick[pickKey] || ""} placeholder="0" disabled={!sourceChecked[pickKey]} onChange={(e) => setSourceQty(detailOrder.id, r.itemId, r, e.target.value)} style={{ width: 72 }} /> : "-"}</td>
-                            <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{orderQtyByItem[r.itemId] || 0}</td><td>{r.allocatedQty}</td><td>{r.remainingQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
+                            <td className="mono">{r.itemId}</td><td>{itemOf(r.itemId)?.name || "-"}</td><td className="mono">{lotCodeOf(r) || "-"}</td><td>{r.plant}</td><td>{r.floor}</td><td className="mono">{r.loc}</td><td className="mono">{r.lpn || "-"}</td><td>{r.onhandQty}</td><td>{orderQtyByItem[r.itemId] || 0}</td><td>{r.allocatedQty}</td><td>{r.remainingQty}</td><td><span className={`sys-tag ${r.system}`}>{r.system}</span></td><td>{r.palletState}</td><td>{utilizationBar(r.utilPct)}</td><td>{stickerStatusBadge(r)}</td>
                           </tr>
                         );
                       })}
@@ -4960,10 +5015,10 @@ function AllocationOrder({ allocOrders, setAllocOrders, stock, setStock, pickTas
                 <div className="section-title" style={{ marginTop: 0 }}>Allocated Source / แหล่งจ่ายที่ถูกจองแล้ว</div>
                 <div className="table-wrap" style={{ marginBottom: 14 }}>
                   <table>
-                    <thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Order Qty</th><th>Location</th><th>LPN</th><th>Onhand Before</th><th>Location Util.</th><th>Source System</th><th>Allocated Qty</th><th>Picked</th><th>Worker / Robot</th></tr></thead>
+                    <thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Order Qty</th><th>Lot</th><th>Location</th><th>LPN</th><th>Onhand Before</th><th>Location Util.</th><th>Source System</th><th>Allocated Qty</th><th>Picked</th><th>Worker / Robot</th></tr></thead>
                     <tbody>
                       {lines.flatMap((l) => (l.sources?.length ? l.sources : [{ loc: "-", qty: 0, system: "-", lpn: "-", pickedQty: 0, shortQty: l.shortfall || l.qty || 0 }]).map((s, idx) => (
-                        <tr key={`${l.itemId}-${s.loc}-${idx}`}><td className="mono">{l.itemId}</td><td>{itemOf(l.itemId)?.name || "-"}</td><td>{l.qty}</td><td className="mono">{s.loc}</td><td className="mono">{s.lpn || stock.find((r) => r.itemId === l.itemId && r.loc === s.loc)?.lpn || "-"}</td><td>{s.onhandBefore ?? "-"}</td><td>{utilizationBar(s.utilPct || locUtil(s.loc).pct)}</td><td>{s.system}</td><td>{s.qty}</td><td>{s.pickedQty || 0}</td><td>{s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === detailOrder.id && t.itemId === l.itemId)?.assignee || "Manual Picker")}</td></tr>
+                        <tr key={`${l.itemId}-${s.loc}-${idx}`}><td className="mono">{l.itemId}</td><td>{itemOf(l.itemId)?.name || "-"}</td><td>{l.qty}</td><td className="mono">{s.lot || s.lotCode || "-"}</td><td className="mono">{s.loc}</td><td className="mono">{s.lpn || stock.find((r) => r.itemId === l.itemId && r.loc === s.loc)?.lpn || "-"}</td><td>{s.onhandBefore ?? "-"}</td><td>{utilizationBar(s.utilPct || locUtil(s.loc).pct)}</td><td>{s.system}</td><td>{s.qty}</td><td>{s.pickedQty || 0}</td><td>{s.system === "ASRS" || s.system === "Miniload" ? s.system : (pickTasks.find((t) => t.order === detailOrder.id && t.itemId === l.itemId)?.assignee || "Manual Picker")}</td></tr>
                       )))}
                     </tbody>
                   </table>
@@ -5068,9 +5123,9 @@ function PickOps({ pickTasks = [], setPickTasks = () => {}, applyPick = () => {}
     if (!qty || qty <= 0) return notify("Qty required", "Enter qty or scan at least one SN/IMEI.", "danger");
     if (qty < Number(active.qty || 0)) return notify("Qty incomplete", `Required ${active.qty}, scanned ${qty}.`, "danger");
     if (qty > Number(active.qty || 0)) return notify("Qty over order", `Required ${active.qty}, scanned ${qty}.`, "danger");
-    applyPick({ orderId: active.order, itemId: active.itemId, loc: active.loc, qty });
+    applyPick({ orderId: active.order, itemId: active.itemId, loc: active.loc, qty, lot: active.lot || active.lotCode || lotCodeOf(source) });
     setPickTasks((list) => list.map((t) => t.id === active.id ? { ...t, status: "Completed", pickedQty: qty, pickedBy: userSession?.user || "system", pickedAt: new Date().toISOString(), scanMode: scan.mode } : t));
-    addTx({ type: "Pick Scan", detail: `${active.id}: ${SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.label} - Location + SYNNEX ID + ${qty} pcs validated`, itemId: active.itemId, lpn: scan.mode === "loose" ? "-" : source?.lpn, fromLoc: active.loc, toLoc: "PICK-PACK", qty, user: userSession?.user || "system" });
+    addTx({ type: "Pick Scan", detail: `${active.id}: ${SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.label} - Location + SYNNEX ID + Lot ${active.lot || active.lotCode || lotCodeOf(source) || "-"} + ${qty} pcs validated`, itemId: active.itemId, lpn: scan.mode === "loose" ? "-" : source?.lpn, lot: active.lot || active.lotCode || lotCodeOf(source), lotCode: active.lot || active.lotCode || lotCodeOf(source), fromLoc: active.loc, toLoc: "PICK-PACK", qty, user: userSession?.user || "system" });
     notify("Pick completed", `${active.id} picked ${qty} pcs. Task is hidden from Handheld to prevent duplicate pick.`, "success");
     setScan(resetScanState(scan.mode));
   };
@@ -5088,7 +5143,7 @@ function PickOps({ pickTasks = [], setPickTasks = () => {}, applyPick = () => {}
         <div className="handheld-phone">
           <div className="handheld-top"><Smartphone size={16} /> Picking Handheld</div>
           <div className="field"><label>Pick Task</label><select value={active?.id || ""} onChange={(e) => setActiveId(e.target.value)}>{visibleTasks.map((t) => <option key={t.id} value={t.id}>{t.id} ? {t.order} ? {t.itemId}</option>)}</select></div>
-          {active && <div className="handheld-job-card"><b>{active.order}</b><span>{itemOf(active.itemId)?.name}</span><em>{active.loc} ? {active.itemId} ? Qty {active.qty}</em></div>}
+          {active && <div className="handheld-job-card"><b>{active.order}</b><span>{itemOf(active.itemId)?.name}</span><em>{active.loc} ? {active.itemId} ? Lot {active.lot || active.lotCode || lotCodeOf(source) || "-"} ? Qty {active.qty}</em></div>}
           <div className="field"><label>Scan Mode</label><select value={scan.mode} onChange={(e) => setMode(e.target.value)}>{SCAN_MODE_OPTIONS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select><div className="kpi-sub">{modeHelp}</div></div>
           {active && <div className="scan-steps-row"><span className="scan-step active">1 Scan Location</span><span className="scan-step active">2 Scan SYNNEX ID</span><span className="scan-step active">3 {scan.mode === "loose" ? "Qty / SN-IMEI" : scan.mode === "bulk" ? "Rapid SN/IMEI" : "SYNNEX+SN+IMEI"}</span></div>}
           <div className="field"><label>Scan Location</label><input className="text-input" value={scan.loc} onChange={(e) => setScan({ ...scan, loc: e.target.value })} /></div>
@@ -5103,9 +5158,9 @@ function PickOps({ pickTasks = [], setPickTasks = () => {}, applyPick = () => {}
           <button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={validatePick}><ScanLine size={13} /> Confirm Pick Scan</button>
         </div>
         <div className="table-wrap" style={{ flex: 1 }}>
-          <table><thead><tr><th>Task</th><th>Order</th><th>SYNNEX ID</th><th>Item Name</th><th>Location</th><th>LPN</th><th>Qty</th><th>Status</th></tr></thead><tbody>
-            {visibleTasks.length === 0 && <tr><td colSpan={8} className="kpi-sub">No active Pick Task.</td></tr>}
-            {visibleTasks.map((t) => { const s = stock.find((r) => r.itemId === t.itemId && r.loc === t.loc); return <tr key={t.id}><td className="mono">{t.id}</td><td>{t.order}</td><td className="mono">{t.itemId}</td><td>{itemOf(t.itemId)?.name || "-"}</td><td className="mono">{t.loc}</td><td className="mono">{t.lpn || s?.lpn || "-"}</td><td>{t.qty}</td><td><OrderStatusPill status={t.status} /></td></tr>; })}
+          <table><thead><tr><th>Task</th><th>Order</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>Location</th><th>LPN</th><th>Qty</th><th>Status</th></tr></thead><tbody>
+            {visibleTasks.length === 0 && <tr><td colSpan={9} className="kpi-sub">No active Pick Task.</td></tr>}
+            {visibleTasks.map((t) => { const s = stock.find((r) => r.itemId === t.itemId && r.loc === t.loc); return <tr key={t.id}><td className="mono">{t.id}</td><td>{t.order}</td><td className="mono">{t.itemId}</td><td>{itemOf(t.itemId)?.name || "-"}</td><td className="mono">{t.lot || t.lotCode || lotCodeOf(s) || "-"}</td><td className="mono">{t.loc}</td><td className="mono">{t.lpn || s?.lpn || "-"}</td><td>{t.qty}</td><td><OrderStatusPill status={t.status} /></td></tr>; })}
           </tbody></table>
         </div>
       </div>
@@ -5164,6 +5219,7 @@ function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pick
   const activeItemId = activeItems[0]?.itemId || stock.find((s) => s.allocatedFor === active?.id)?.itemId || "";
   const activeQty = activeItems.reduce((a, l) => a + Number(l.qty || 0), 0) || stock.filter((s) => s.allocatedFor === active?.id && s.status === "PICKED").reduce((a, s) => a + Number(s.qty || 0), 0) || 1;
   const boxLpn = active ? stock.find((s) => s.allocatedFor === active.id || s.status === "PICKED")?.lpn || `BOX-${active.id}` : "";
+  const packLot = active ? lotCodeOf(stock.find((s) => s.allocatedFor === active.id && s.itemId === activeItemId) || stock.find((s) => s.allocatedFor === active.id) || {}) : "";
   const [scan, setScan] = useState(resetScanState("bulk"));
   const [invoiceQ, setInvoiceQ] = useState("");
   const invoiceRows = allocOrders.map((o) => ({
@@ -5200,7 +5256,7 @@ function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pick
     if (!scan.label) return notify("Label required", "Print shipping label before closing order.", "danger");
     const qty = scannedQtyOf(scan, scan.qty);
     setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Packed", packedAt: new Date().toISOString(), packedBy: userSession?.user || "system", packScanMode: scan.mode, packScanQty: qty } : o));
-    addTx({ type: "Pack", detail: `${active.id}: ${SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.label} - Packed ${qty} pcs - LPN/Box ${scan.lpn || "-"} - VDO completed`, orderId: active.id, itemId: scan.item, lpn: scan.lpn || "-", loc: "PACK", qty, user: userSession?.user || "system" });
+    addTx({ type: "Pack", detail: `${active.id}: ${SCAN_MODE_OPTIONS.find((m) => m.id === scan.mode)?.label} - Packed ${qty} pcs - LPN/Box ${scan.lpn || "-"} - Lot ${packLot || "-"} - VDO completed`, orderId: active.id, itemId: scan.item, lpn: scan.lpn || "-", lot: packLot, lotCode: packLot, loc: "PACK", qty, user: userSession?.user || "system" });
     notify("Pack completed", `${active.id} is Packed and hidden from Pack queue.`, "success");
     setScan(resetScanState(scan.mode));
   };
@@ -5223,10 +5279,10 @@ function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pick
       <div className="card" style={{ marginBottom: 14 }}>
         <h3>Invoice / Order Location Search</h3>
         <div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={invoiceQ} onChange={(e) => setInvoiceQ(e.target.value)} placeholder="Search invoice, SO, customer" /></div>
-        <div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Order</th><th>Customer</th><th>Current Status</th><th>Location / Zone</th><th>LPN</th><th>Item</th></tr></thead><tbody>{invoiceRows.slice(0, 6).map((r) => {
+        <div className="table-wrap"><table><thead><tr><th>Invoice</th><th>Order</th><th>Customer</th><th>Current Status</th><th>Location / Zone</th><th>LPN</th><th>Lot</th><th>Item</th></tr></thead><tbody>{invoiceRows.slice(0, 6).map((r) => {
           const first = r.stockRows[0];
           const loc = first?.loc || (r.order.status === "Packed" ? "PACKED / LOAD-STAGING" : r.order.status === "Picked" ? "PICK-PACK" : "-");
-          return <tr key={r.invoice}><td className="mono">{r.invoice}</td><td className="mono">{r.order.id}</td><td>{r.order.customer || "-"}</td><td><OrderStatusPill status={r.order.status} /></td><td className="mono">{loc}</td><td className="mono">{first?.lpn || "-"}</td><td>{first ? itemOf(first.itemId)?.name : (r.order.items || r.order.lines || [])[0]?.itemId || "-"}</td></tr>;
+          return <tr key={r.invoice}><td className="mono">{r.invoice}</td><td className="mono">{r.order.id}</td><td>{r.order.customer || "-"}</td><td><OrderStatusPill status={r.order.status} /></td><td className="mono">{loc}</td><td className="mono">{first?.lpn || "-"}</td><td className="mono">{lotCodeOf(first) || "-"}</td><td>{first ? itemOf(first.itemId)?.name : (r.order.items || r.order.lines || [])[0]?.itemId || "-"}</td></tr>;
         })}</tbody></table></div>
       </div>
       <div className="grid g2">
@@ -5251,7 +5307,7 @@ function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pick
           <button className="btn" style={{ width: "100%", justifyContent: "center" }} disabled={!active} onClick={() => confirmAction({ title: "Confirm Pack", message: `Confirm Pack ${active?.id || ""}?`, onConfirm: confirmPack })}><PackageCheck size={13} /> Confirm Packed</button>
           <button className="btn secondary" style={{ width: "100%", justifyContent: "center", marginTop: 8, color: "var(--danger)" }} disabled={!active} onClick={() => confirmAction({ title: "Sales API Cancel Order", message: `Simulate Sales API cancellation for ${active?.id || ""}?`, kind: "danger", onConfirm: cancelPack })}><ShieldAlert size={13} /> Cancel Pack / Order</button>
         </div>
-        <div className="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>LPN / Box</th><th>Scan Required</th><th>Status</th><th>Packed By</th></tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={6} className="kpi-sub">No active Pack task.</td></tr>}{rows.map((o) => <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td className="mono">{stock.find((s) => s.allocatedFor === o.id)?.lpn || `BOX-${o.id}`}</td><td>SYNNEX / Qty / SN / IMEI / VDO</td><td><OrderStatusPill status={o.status} /></td><td>{o.packedBy || "-"}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>LPN / Box</th><th>Lot</th><th>Scan Required</th><th>Status</th><th>Packed By</th></tr></thead><tbody>{rows.length === 0 && <tr><td colSpan={7} className="kpi-sub">No active Pack task.</td></tr>}{rows.map((o) => { const s = stock.find((r) => r.allocatedFor === o.id); return <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td className="mono">{s?.lpn || `BOX-${o.id}`}</td><td className="mono">{lotCodeOf(s) || "-"}</td><td>SYNNEX / Qty / SN / IMEI / VDO</td><td><OrderStatusPill status={o.status} /></td><td>{o.packedBy || "-"}</td></tr>; })}</tbody></table></div>
       </div>
     </>
   );
@@ -5263,12 +5319,13 @@ function Shipping({ allocOrders = [], setAllocOrders = () => {}, stock = [], set
   const active = rows.find((o) => o.id === activeId) || rows[0];
   const [scan, setScan] = useState({ awb: "", bill: "", po: "", truck: "TRUCK-BKK-01", seal: "" });
   const activePickedRows = active ? stock.filter((s) => s.allocatedFor === active.id && ["PICKED", "PACKED"].includes(s.status)) : [];
+  const activeLots = [...new Set(activePickedRows.map(lotCodeOf).filter(Boolean))];
   const shipOrder = () => {
     if (!active) return;
     if (!scan.awb && !scan.bill && !scan.po) return notify("ยังไม่ได้ยิงเอกสาร", "ต้องสแกน AWB หรือ Bill หรือ PO ก่อนขึ้นรถ", "danger");
     setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Shipped", shippedAt: new Date().toISOString(), shippedBy: userSession?.user || "system", awb: scan.awb, bill: scan.bill, shipPo: scan.po, truckNo: scan.truck, sealNo: scan.seal } : o));
     setStock((list) => list.filter((s) => !(s.allocatedFor === active.id && ["PICKED", "PACKED"].includes(s.status))));
-    addTx({ type: "Ship", detail: `${active.id}: Ship to truck ${scan.truck} · AWB ${scan.awb || "-"} · Bill ${scan.bill || "-"} · PO ${scan.po || "-"} · ตัด Stock จบ Process Pick > Pack > Ship`, orderId: active.id, loc: "LOAD-STAGING", user: userSession?.user || "system" });
+    addTx({ type: "Ship", detail: `${active.id}: Ship to truck ${scan.truck} · AWB ${scan.awb || "-"} · Bill ${scan.bill || "-"} · PO ${scan.po || "-"} · Lot ${activeLots.join(", ") || "-"} · ตัด Stock จบ Process Pick > Pack > Ship`, orderId: active.id, lot: activeLots.join(", "), lotCode: activeLots.join(", "), loc: "LOAD-STAGING", user: userSession?.user || "system" });
     notify("Ship สำเร็จ", `${active.id} ขึ้นรถและตัด Stock แล้ว`, "success");
     setScan({ awb: "", bill: "", po: "", truck: "TRUCK-BKK-01", seal: "" });
   };
@@ -5296,10 +5353,10 @@ function Shipping({ allocOrders = [], setAllocOrders = () => {}, stock = [], set
           <button className="btn" disabled={!active || active.status === "Shipped"} onClick={() => confirmAction({ title: "Confirm Ship to Truck", message: `ยืนยันยิงเอกสารขึ้นรถและตัด Stock ของ ${active?.id || ""}?`, onConfirm: shipOrder })}><Truck size={13} /> Ship to Truck</button>
         </div>
         <div className="table-wrap">
-          <table><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>AWB</th><th>Bill</th><th>Truck</th><th>Picked/Packed LPN</th></tr></thead><tbody>{rows.map((o) => <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td><OrderStatusPill status={o.status} /></td><td className="mono">{o.awb || "-"}</td><td className="mono">{o.bill || "-"}</td><td>{o.truckNo || "-"}</td><td className="mono">{stock.filter((s) => s.allocatedFor === o.id).map((s) => s.lpn || "-").join(", ") || "-"}</td></tr>)}</tbody></table>
+          <table><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>AWB</th><th>Bill</th><th>Truck</th><th>Picked/Packed LPN</th><th>Lot</th></tr></thead><tbody>{rows.map((o) => { const orderStock = stock.filter((s) => s.allocatedFor === o.id); return <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td><OrderStatusPill status={o.status} /></td><td className="mono">{o.awb || "-"}</td><td className="mono">{o.bill || "-"}</td><td>{o.truckNo || "-"}</td><td className="mono">{orderStock.map((s) => s.lpn || "-").join(", ") || "-"}</td><td className="mono">{[...new Set(orderStock.map(lotCodeOf).filter(Boolean))].join(", ") || "-"}</td></tr>; })}</tbody></table>
         </div>
       </div>
-      {active && <div className="table-wrap" style={{ marginTop: 14 }}><table><thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>LPN</th><th>Location</th><th>Qty</th><th>Status</th></tr></thead><tbody>{activePickedRows.map((s) => <tr key={s.key}><td className="mono">{s.itemId}</td><td>{itemOf(s.itemId)?.name || "-"}</td><td className="mono">{s.lpn || "-"}</td><td className="mono">{s.loc || "PICK-PACK"}</td><td>{s.qty}</td><td><OrderStatusPill status={s.status} /></td></tr>)}</tbody></table></div>}
+      {active && <div className="table-wrap" style={{ marginTop: 14 }}><table><thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>LPN</th><th>Location</th><th>Qty</th><th>Status</th></tr></thead><tbody>{activePickedRows.map((s) => <tr key={s.key}><td className="mono">{s.itemId}</td><td>{itemOf(s.itemId)?.name || "-"}</td><td className="mono">{lotCodeOf(s) || "-"}</td><td className="mono">{s.lpn || "-"}</td><td className="mono">{s.loc || "PICK-PACK"}</td><td>{s.qty}</td><td><OrderStatusPill status={s.status} /></td></tr>)}</tbody></table></div>}
     </>
   );
 }
@@ -5319,15 +5376,15 @@ function InventoryWorkOrders({ stock = [], setStock = () => {}, addTx = () => {}
     const id = `${mode === "Transfer" ? "TO" : mode === "Reservation" ? "RS" : "CS"}-${rand(10000, 99999)}`;
     if (mode === "Transfer") {
       setStock((list) => list.map((s) => s === row ? { ...s, loc: form.toLoc, status: "AVL", transferRef: id } : s));
-      addTx({ type: "Transfer", detail: `${id}: ย้าย ${row.lpn || "-"} · ${row.itemId} จาก ${row.loc} ไป ${form.toLoc} (${locOf(form.toLoc)?.plant || "-"})`, itemId: row.itemId, lpn: row.lpn, fromLoc: row.loc, toLoc: form.toLoc, loc: form.toLoc, user: userSession?.user || "system" });
+      addTx({ type: "Transfer", detail: `${id}: ย้าย ${row.lpn || "-"} · ${row.itemId} · Lot ${lotCodeOf(row) || "-"} จาก ${row.loc} ไป ${form.toLoc} (${locOf(form.toLoc)?.plant || "-"})`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), fromLoc: row.loc, toLoc: form.toLoc, loc: form.toLoc, user: userSession?.user || "system" });
     } else if (mode === "Reservation") {
       setStock((list) => list.map((s) => s === row ? { ...s, status: "RESV", reservationReason: form.reason, reservationRef: id } : s));
-      addTx({ type: "Reservation", detail: `${id}: กันสินค้า ${row.lpn || "-"} · ${row.itemId} ที่ ${row.loc} เพื่อ ${form.reason}`, itemId: row.itemId, lpn: row.lpn, loc: row.loc, user: userSession?.user || "system" });
+      addTx({ type: "Reservation", detail: `${id}: กันสินค้า ${row.lpn || "-"} · ${row.itemId} · Lot ${lotCodeOf(row) || "-"} ที่ ${row.loc} เพื่อ ${form.reason}`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), loc: row.loc, user: userSession?.user || "system" });
     } else {
       setStock((list) => list.map((s) => s === row ? { ...s, loc: "X-QC-01", status: "HOLD", checkStockRef: id } : s));
-      addTx({ type: "Check Stock", detail: `${id}: เบิก ${row.lpn || "-"} · ${row.itemId} จาก ${row.loc} มา Check Stock ที่ X-QC-01`, itemId: row.itemId, lpn: row.lpn, fromLoc: row.loc, toLoc: "X-QC-01", loc: "X-QC-01", user: userSession?.user || "system" });
+      addTx({ type: "Check Stock", detail: `${id}: เบิก ${row.lpn || "-"} · ${row.itemId} · Lot ${lotCodeOf(row) || "-"} จาก ${row.loc} มา Check Stock ที่ X-QC-01`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), fromLoc: row.loc, toLoc: "X-QC-01", loc: "X-QC-01", user: userSession?.user || "system" });
     }
-    setOrders((list) => [{ id, mode, itemId: row.itemId, itemName: itemOf(row.itemId)?.name, lpn: row.lpn || "-", fromLoc: row.loc, toLoc: mode === "Transfer" ? form.toLoc : mode === "Check Stock" ? "X-QC-01" : row.loc, qty, reason: form.reason, ref: form.ref || "-", by: userSession?.user || "system", t: new Date().toLocaleString("th-TH"), status: "Completed" }, ...list]);
+    setOrders((list) => [{ id, mode, itemId: row.itemId, itemName: itemOf(row.itemId)?.name, lot: lotCodeOf(row) || "-", lpn: row.lpn || "-", fromLoc: row.loc, toLoc: mode === "Transfer" ? form.toLoc : mode === "Check Stock" ? "X-QC-01" : row.loc, qty, reason: form.reason, ref: form.ref || "-", by: userSession?.user || "system", t: new Date().toLocaleString("th-TH"), status: "Completed" }, ...list]);
     notify("สร้างคำสั่งสำเร็จ", `${id} ดำเนินการ ${mode} แล้ว`, "success");
   };
   return (
@@ -5351,10 +5408,10 @@ function InventoryWorkOrders({ stock = [], setStock = () => {}, addTx = () => {}
           <button className="btn" onClick={() => confirmAction({ title: `Confirm ${mode}`, message: `ยืนยันสร้างคำสั่ง ${mode} สำหรับ ${selected?.lpn || selected?.itemId || ""}?`, onConfirm: createOrder })}><ClipboardCheck size={13} /> สร้างคำสั่ง</button>
         </div>
         <div className="table-wrap">
-          <table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Location</th><th>Warehouse</th><th>Qty</th><th>Status</th></tr></thead><tbody>{candidates.slice(0, 10).map((s) => <tr key={s.key}><td className="mono">{s.lpn || "-"}</td><td className="mono">{s.itemId}</td><td>{itemOf(s.itemId)?.name || "-"}</td><td className="mono">{s.loc || "PICK-PACK"}</td><td>{PLANTS.find((p) => p.id === locOf(s.loc)?.plant)?.name || "-"}</td><td>{s.qty}</td><td>{s.status}</td></tr>)}</tbody></table>
+          <table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>Location</th><th>Warehouse</th><th>Qty</th><th>Status</th></tr></thead><tbody>{candidates.slice(0, 10).map((s) => <tr key={s.key}><td className="mono">{s.lpn || "-"}</td><td className="mono">{s.itemId}</td><td>{itemOf(s.itemId)?.name || "-"}</td><td className="mono">{lotCodeOf(s) || "-"}</td><td className="mono">{s.loc || "PICK-PACK"}</td><td>{PLANTS.find((p) => p.id === locOf(s.loc)?.plant)?.name || "-"}</td><td>{s.qty}</td><td>{s.status}</td></tr>)}</tbody></table>
         </div>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>Order</th><th>Mode</th><th>SYNNEX ID</th><th>Item Name</th><th>LPN</th><th>From</th><th>To</th><th>Qty</th><th>Reason</th><th>User</th><th>Time</th><th>Status</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td className="mono">{o.id}</td><td>{o.mode}</td><td className="mono">{o.itemId}</td><td>{o.itemName}</td><td className="mono">{o.lpn}</td><td className="mono">{o.fromLoc}</td><td className="mono">{o.toLoc}</td><td>{o.qty}</td><td>{o.reason}</td><td>{o.by}</td><td>{o.t}</td><td>{o.status}</td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>Order</th><th>Mode</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>LPN</th><th>From</th><th>To</th><th>Qty</th><th>Reason</th><th>User</th><th>Time</th><th>Status</th></tr></thead><tbody>{orders.map((o) => <tr key={o.id}><td className="mono">{o.id}</td><td>{o.mode}</td><td className="mono">{o.itemId}</td><td>{o.itemName}</td><td className="mono">{o.lot || "-"}</td><td className="mono">{o.lpn}</td><td className="mono">{o.fromLoc}</td><td className="mono">{o.toLoc}</td><td>{o.qty}</td><td>{o.reason}</td><td>{o.by}</td><td>{o.t}</td><td>{o.status}</td></tr>)}</tbody></table></div>
     </>
   );
 }
@@ -5391,14 +5448,14 @@ function PreworkStickers({ stickerTasks = [], setStickerTasks = () => {}, sticke
     if (!selected) return;
     const id = `PW-${Date.now().toString().slice(-5)}`;
     const qty = Math.min(selected.qty, Math.max(1, Math.ceil(selected.qty / 2)));
-    const task = { id, order: selected.tone === "risk" ? (selected.waitingOrders[0]?.id || "URGENT-ORDER") : "PREWORK-BILL", itemId: selected.itemId, qtyRequired: qty, qtyDone: 0, source: locOf(selected.loc)?.system === "ASRS" ? "ASRS" : selected.loc.includes("STAGE") ? "Inbound Staging" : "Onfloor", machineNo: machine, workDate: new Date().toISOString().slice(0, 10), status: locOf(selected.loc)?.system === "ASRS" ? "ASRS Command Sent" : "Move Order Created", note: selected.reason, stockKey: selected.key, lpn: selected.lpn, fromLoc: selected.loc, toLoc: "PREWORK", system: locOf(selected.loc)?.system || "Manual", moveStatus: "Pending Move", stickerSize: selected.stickerSize, priorityTone: selected.tone, nextMoveLabel: selected.tone === "risk" ? "By pass move to picking station" : "Move to Putaway / Miniload", nextToLoc: selected.tone === "risk" ? "PICK-PACK" : "MZ-01-01-A" };
+    const task = { id, order: selected.tone === "risk" ? (selected.waitingOrders[0]?.id || "URGENT-ORDER") : "PREWORK-BILL", itemId: selected.itemId, lot: lotCodeOf(selected), lotCode: lotCodeOf(selected), qtyRequired: qty, qtyDone: 0, source: locOf(selected.loc)?.system === "ASRS" ? "ASRS" : selected.loc.includes("STAGE") ? "Inbound Staging" : "Onfloor", machineNo: machine, workDate: new Date().toISOString().slice(0, 10), status: locOf(selected.loc)?.system === "ASRS" ? "ASRS Command Sent" : "Move Order Created", note: selected.reason, stockKey: selected.key, lpn: selected.lpn, fromLoc: selected.loc, toLoc: "PREWORK", system: locOf(selected.loc)?.system || "Manual", moveStatus: "Pending Move", stickerSize: selected.stickerSize, priorityTone: selected.tone, nextMoveLabel: selected.tone === "risk" ? "By pass move to picking station" : "Move to Putaway / Miniload", nextToLoc: selected.tone === "risk" ? "PICK-PACK" : "MZ-01-01-A" };
     setStickerTasks((list) => [task, ...list]);
-    addTx({ type: "Sticker Bill", detail: `${id}: เรียก ${selected.lpn || selected.itemId} จาก ${selected.loc} ไป PREWORK · Machine ${machine}`, itemId: selected.itemId, lpn: selected.lpn, fromLoc: selected.loc, toLoc: "PREWORK", user: userSession?.user || "system" });
+    addTx({ type: "Sticker Bill", detail: `${id}: เรียก ${selected.lpn || selected.itemId} จาก ${selected.loc} ไป PREWORK · Machine ${machine}`, itemId: selected.itemId, lpn: selected.lpn, lot: lotCodeOf(selected), lotCode: lotCodeOf(selected), fromLoc: selected.loc, toLoc: "PREWORK", user: userSession?.user || "system" });
     notify("สร้าง Bill Prework สำเร็จ", `${id} ถูกสร้างเพื่อเรียกของไปติดสติ๊กเกอร์`, "success");
   };
   const closeTask = (task) => {
     setStickerTasks((list) => list.map((t) => t.id === task.id ? { ...t, status: "Completed", qtyDone: t.qtyRequired, confirmedAt: new Date().toISOString(), nextMoveStatus: "Pending", nextToLoc: t.nextToLoc || (t.priorityTone === "risk" ? "PICK-PACK" : "MZ-01-01-A") } : t));
-    addTx({ type: "Sticker Completed", detail: `${task.id}: ${task.machineNo} ติดครบ ${task.qtyRequired} ชิ้น · Sticker ${task.stickerSize}`, itemId: task.itemId, lpn: task.lpn, loc: "PREWORK", user: userSession?.user || "system" });
+    addTx({ type: "Sticker Completed", detail: `${task.id}: ${task.machineNo} ติดครบ ${task.qtyRequired} ชิ้น · Sticker ${task.stickerSize}`, itemId: task.itemId, lpn: task.lpn, lot: task.lot || task.lotCode, lotCode: task.lot || task.lotCode, loc: "PREWORK", user: userSession?.user || "system" });
     notify("จบงาน Prework", `${task.id} ติดสติ๊กเกอร์ครบแล้ว`, "success");
   };
   const machineRows = STICKER_MACHINES.map((m) => ({ machine: m, done: stickerTasks.filter((t) => t.machineNo === m).reduce((a, t) => a + Number(t.qtyDone || 0), 0), plan: stickerTasks.filter((t) => t.machineNo === m).reduce((a, t) => a + Number(t.qtyRequired || 0), 0) }));
@@ -5433,7 +5490,7 @@ function PreworkStickers({ stickerTasks = [], setStickerTasks = () => {}, sticke
         </div>
       </div>
       <div className="grid g3" style={{ marginBottom: 14 }}>{stickerStock.map((s) => <div className="card" key={s.rollId}><h3>Sticker Size {s.size}</h3><div className="kpi-val">{Number(s.qty || 0).toLocaleString()}</div><div className="kpi-sub">{s.rollId} · {s.loc}</div></div>)}</div>
-      <div className="table-wrap"><table><thead><tr><th>Bill</th><th>Priority</th><th>SYNNEX ID</th><th>Item Name</th><th>LPN</th><th>From</th><th>Machine</th><th>Sticker Size</th><th>Plan</th><th>Done</th><th>Status</th><th>Next Move</th><th></th></tr></thead><tbody>{stickerTasks.map((t) => <tr className={`prework-priority-row ${t.status === "Completed" ? "done" : t.priorityTone === "risk" ? "urgent" : t.priorityTone === "warn" ? "replenish" : "normal"}`} key={t.id}><td className="mono">{t.id}</td><td><span className={`prework-priority-badge ${t.status === "Completed" ? "done" : t.priorityTone === "risk" ? "urgent" : t.priorityTone === "warn" ? "replenish" : "normal"}`}>{t.status === "Completed" ? "เสร็จแล้ว" : t.priorityTone === "risk" ? "ด่วนมาก" : t.priorityTone === "warn" ? "เติมสต็อก" : "ต้องทำ"}</span></td><td className="mono">{t.itemId}</td><td>{itemOf(t.itemId)?.name || "-"}</td><td className="mono">{t.lpn || "-"}</td><td className="mono">{t.fromLoc || t.source}</td><td>{t.machineNo || "-"}</td><td>{t.stickerSize || stickerSizeForItem(itemOf(t.itemId))}</td><td>{Number(t.qtyRequired || 0).toLocaleString()}</td><td>{Number(t.qtyDone || 0).toLocaleString()}</td><td>{t.status}</td><td>{t.nextMoveLabel || t.nextToLoc || "-"}</td><td><button className="btn secondary" disabled={t.status === "Completed"} onClick={() => closeTask(t)}><CheckCircle2 size={12} /> จบงาน</button></td></tr>)}</tbody></table></div>
+      <div className="table-wrap"><table><thead><tr><th>Bill</th><th>Priority</th><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>LPN</th><th>From</th><th>Machine</th><th>Sticker Size</th><th>Plan</th><th>Done</th><th>Status</th><th>Next Move</th><th></th></tr></thead><tbody>{stickerTasks.map((t) => <tr className={`prework-priority-row ${t.status === "Completed" ? "done" : t.priorityTone === "risk" ? "urgent" : t.priorityTone === "warn" ? "replenish" : "normal"}`} key={t.id}><td className="mono">{t.id}</td><td><span className={`prework-priority-badge ${t.status === "Completed" ? "done" : t.priorityTone === "risk" ? "urgent" : t.priorityTone === "warn" ? "replenish" : "normal"}`}>{t.status === "Completed" ? "เสร็จแล้ว" : t.priorityTone === "risk" ? "ด่วนมาก" : t.priorityTone === "warn" ? "เติมสต็อก" : "ต้องทำ"}</span></td><td className="mono">{t.itemId}</td><td>{itemOf(t.itemId)?.name || "-"}</td><td className="mono">{t.lot || t.lotCode || "-"}</td><td className="mono">{t.lpn || "-"}</td><td className="mono">{t.fromLoc || t.source}</td><td>{t.machineNo || "-"}</td><td>{t.stickerSize || stickerSizeForItem(itemOf(t.itemId))}</td><td>{Number(t.qtyRequired || 0).toLocaleString()}</td><td>{Number(t.qtyDone || 0).toLocaleString()}</td><td>{t.status}</td><td>{t.nextMoveLabel || t.nextToLoc || "-"}</td><td><button className="btn secondary" disabled={t.status === "Completed"} onClick={() => closeTask(t)}><CheckCircle2 size={12} /> จบงาน</button></td></tr>)}</tbody></table></div>
     </>
   );
 }
@@ -5620,7 +5677,7 @@ function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => 
   const submit = () => {
     if (!row) return;
     setStock((list) => list.map((r) => (r.key === row.key ? { ...r, status } : r)));
-    addTx({ type: "Status Change", detail: `${row.lpn || row.key}: ${row.status} -> ${status} by ${userSession?.user || "system"}`, itemId: row.itemId, lpn: row.lpn, loc: row.loc, user: userSession?.user || "system" });
+    addTx({ type: "Status Change", detail: `${row.lpn || row.key}: ${row.status} -> ${status} · Lot ${lotCodeOf(row) || "-"} by ${userSession?.user || "system"}`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), loc: row.loc, user: userSession?.user || "system" });
     notify("ปรับ Status สำเร็จ", `${row.lpn || row.itemId} เป็น ${status}`, "success");
     setRow(null);
   };
@@ -5642,7 +5699,7 @@ function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => 
         </div>
       </div>
       <div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Plant / WH</th><th>Floor</th><th>Qty</th><th>Status</th><th>Utilization / Pallet-Basket</th><th></th></tr></thead><tbody>
-        {rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td><span className={`scan-step ${r.sticker.ok ? "done" : "active"}`}>{r.sticker.label}</span></td><td className="mono">{r.batch || "-"}</td><td className="mono">{r.loc}</td><td>{plantLabelOf(r.locObj?.plant)}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}<div className="kpi-sub">cap {r.palletCap}</div></td><td><button className="btn secondary" onClick={() => { setRow(r); setStatus(r.status || "AVL"); }}><Edit3 size={12} /> ปรับ Status</button></td></tr>)}
+        {rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td><span className={`scan-step ${r.sticker.ok ? "done" : "active"}`}>{r.sticker.label}</span></td><td className="mono">{lotCodeOf(r) || "-"}</td><td className="mono">{r.loc}</td><td>{plantLabelOf(r.locObj?.plant)}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}<div className="kpi-sub">cap {r.palletCap}</div></td><td><button className="btn secondary" onClick={() => { setRow(r); setStatus(r.status || "AVL"); }}><Edit3 size={12} /> ปรับ Status</button></td></tr>)}
       </tbody></table></div>
       {row && <Modal onClose={() => setRow(null)} width={420}><h2>ปรับ Status ราย LPN</h2><div className="kpi-sub" style={{ marginBottom: 12 }}>{row.lpn || row.key} · {row.itemId} · {row.loc}</div><div className="field"><label>Status ใหม่</label><select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS_LIST.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></div><button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => confirmAction({ title: "ยืนยันปรับ Status", message: `ปรับ ${row.lpn || row.itemId} เป็น ${status}?`, onConfirm: submit })}>ยืนยัน</button></Modal>}
     </>
@@ -5707,22 +5764,98 @@ function AgingReport({ stock = [], setStock = () => {}, allocOrders = [], setAll
     notify("Force Pick/Pack แล้ว", `${row.lpn} ถูกส่งเข้า Pick-Pack เพื่อจ่ายก่อนหมดอายุ`, "success");
     setDetail(null);
   };
-  return <><div className="section-title">Aging</div><ProductRegisterBoard title="Aging Register" subtitle={`${rows.length} aging records · lot, receiving age, status and utilization`} rows={rows.map(registerRowFromInventory)} onRowClick={(r) => setDetail(rows.find((x) => x.key === r.key) || rows.find((x) => x.lpn === r.lpn && x.itemId === r.synnexId))} /><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา วัน/เดือน/ปี, SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Floor</th><th>Qty</th><th>Aging Days</th><th>Status</th><th>Utilization</th><th></th></tr></thead><tbody>{rows.map((r) => { const age = ageBucket(r.days); return <tr className="clickable" key={r.key || `${r.loc}-${r.itemId}`} onClick={() => setDetail(r)}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{r.batch || "-"}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><span className={`age-chip ${age.cls}`}>{r.days} วัน</span></td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util, `age-${age.cls === "ok" ? "ok" : age.cls === "warn" ? "warn" : "risk"}`)}</td><td><button className="btn secondary" onClick={(e) => { e.stopPropagation(); setDetail(r); }}><Search size={12} /> Detail</button></td></tr>; })}</tbody></table></div>{detail && <AgingLpnDetail row={detail} projects={allocatedProjectsOf(detail)} onClose={() => setDetail(null)} onUnallocate={() => confirmAction({ title: "ปลด Allocate จาก Aging", message: `ปลดการจอง ${detail.lpn || detail.itemId} เพื่อเอาไปจัดสรรใหม่หรือไม่`, onConfirm: () => unallocateLpn(detail) })} onForce={() => confirmAction({ title: "Force Allocate / Pick / Pack", message: `บังคับนำ ${detail.lpn || detail.itemId} ไป Pick-Pack เพื่อจ่ายก่อน Aging เสี่ยงหรือไม่`, onConfirm: () => forceFulfill(detail) })} />}</>;
+  return <><div className="section-title">Aging</div><ProductRegisterBoard title="Aging Register" subtitle={`${rows.length} aging records · lot, receiving age, status and utilization`} rows={rows.map(registerRowFromInventory)} onRowClick={(r) => setDetail(rows.find((x) => x.key === r.key) || rows.find((x) => x.lpn === r.lpn && x.itemId === r.synnexId))} /><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา วัน/เดือน/ปี, SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Floor</th><th>Qty</th><th>Aging Days</th><th>Status</th><th>Utilization</th><th></th></tr></thead><tbody>{rows.map((r) => { const age = ageBucket(r.days); return <tr className="clickable" key={r.key || `${r.loc}-${r.itemId}`} onClick={() => setDetail(r)}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{lotCodeOf(r) || "-"}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><span className={`age-chip ${age.cls}`}>{r.days} วัน</span></td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util, `age-${age.cls === "ok" ? "ok" : age.cls === "warn" ? "warn" : "risk"}`)}</td><td><button className="btn secondary" onClick={(e) => { e.stopPropagation(); setDetail(r); }}><Search size={12} /> Detail</button></td></tr>; })}</tbody></table></div>{detail && <AgingLpnDetail row={detail} projects={allocatedProjectsOf(detail)} onClose={() => setDetail(null)} onUnallocate={() => confirmAction({ title: "ปลด Allocate จาก Aging", message: `ปลดการจอง ${detail.lpn || detail.itemId} เพื่อเอาไปจัดสรรใหม่หรือไม่`, onConfirm: () => unallocateLpn(detail) })} onForce={() => confirmAction({ title: "Force Allocate / Pick / Pack", message: `บังคับนำ ${detail.lpn || detail.itemId} ไป Pick-Pack เพื่อจ่ายก่อน Aging เสี่ยงหรือไม่`, onConfirm: () => forceFulfill(detail) })} />}</>;
 }
 
 function StockCover({ stock = [] }) {
   const [q, setQ] = useState("");
   const rows = inventoryRowsOf(stock).map((r) => { const daily = Math.max(1, r.item?.dailySales || 10); return { ...r, daily, cover: Number(r.qty || 0) / daily }; }).filter((r) => `${r.lpn} ${r.itemId} ${r.item?.name} ${r.loc} ${r.batch} ${r.sizeCode} ${r.floorName}`.toLowerCase().includes(q.toLowerCase())).sort((a, b) => a.cover - b.cover);
-  return <><div className="section-title">Stock Cover Day</div><ProductRegisterBoard title="Stock Cover Register" subtitle={`${rows.length} cover records · demand speed, stock and location view`} rows={rows.map(registerRowFromInventory)} /><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา SYNNEX ID, ชื่อสินค้า, LPN, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Location</th><th>Floor</th><th>Stock</th><th>Daily Sales</th><th>Cover Day</th><th>Status</th><th>Utilization</th></tr></thead><tbody>{rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td>{r.daily}</td><td style={{ color: r.cover < 7 ? "var(--danger)" : r.cover < 14 ? "var(--amber)" : "var(--teal)", fontWeight: 800 }}>{r.cover.toFixed(1)}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}</td></tr>)}</tbody></table></div></>;
+  return <><div className="section-title">Stock Cover Day</div><ProductRegisterBoard title="Stock Cover Register" subtitle={`${rows.length} cover records · demand speed, stock and location view`} rows={rows.map(registerRowFromInventory)} /><div className="search-box" style={{ maxWidth: 520 }}><Search size={15} color="var(--muted)" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา SYNNEX ID, ชื่อสินค้า, LPN, Lot, location, size, floor" /></div><div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Floor</th><th>Stock</th><th>Daily Sales</th><th>Cover Day</th><th>Status</th><th>Utilization</th></tr></thead><tbody>{rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td>{r.sticker.label}</td><td className="mono">{lotCodeOf(r) || "-"}</td><td className="mono">{r.loc}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td>{r.daily}</td><td style={{ color: r.cover < 7 ? "var(--danger)" : r.cover < 14 ? "var(--amber)" : "var(--teal)", fontWeight: 800 }}>{r.cover.toFixed(1)}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}</td></tr>)}</tbody></table></div></>;
 }
 
-function genRecall(currentQty) { const received = [{ ref: "PO-256907-101", date: "2569-07-01", qty: currentQty + 120 }, { ref: "PO-256907-142", date: "2569-07-05", qty: 80 }]; const issued = [{ ref: "SO-88210", date: "2569-07-07", qty: 100 }, { ref: "SO-88291", date: "2569-07-08", qty: 100 }]; return { received, issued, totalReceived: received.reduce((a, r) => a + r.qty, 0), totalIssued: issued.reduce((a, r) => a + r.qty, 0) }; }
+function genRecall(row, stockRows = []) {
+  const lot = lotCodeOf(row);
+  const parsed = parseLotCode(lot);
+  const receiveDate = row?.receiveDate || parsed.receiveDate || "2026-08-26";
+  const currentQty = Number(row?.qty || 0);
+  const received = [
+    { ref: `PO-${String(lot || "LOT").slice(-4)}-IN1`, date: receiveDate, lot, lpn: row?.lpn || "-", loc: row?.loc || "-", qty: currentQty + 80 },
+    { ref: `PO-${String(lot || "LOT").slice(-4)}-IN2`, date: receiveDate, lot, lpn: row?.lpn || "-", loc: row?.loc || "-", qty: Math.max(20, Math.round(currentQty * 0.25)) },
+  ];
+  const issued = [
+    { ref: "SO-88213", date: "2026-08-27", lot, lpn: row?.lpn || "-", loc: "PICK-PACK", qty: Math.min(40, Math.max(0, currentQty)) },
+    { ref: "SO-88270", date: "2026-08-28", lot, lpn: row?.lpn || "-", loc: "LOAD-STAGING", qty: Math.min(60, Math.max(0, currentQty - 40)) },
+  ].filter((r) => r.qty > 0);
+  const siblingLots = stockRows
+    .filter((s) => s.itemId === row?.itemId)
+    .map((s) => ({ lot: lotCodeOf(s), lpn: s.lpn, loc: s.loc, qty: s.qty, status: s.status, receiveDate: s.receiveDate || parseLotCode(lotCodeOf(s)).receiveDate }));
+  return { received, issued, siblingLots, totalReceived: received.reduce((a, r) => a + r.qty, 0), totalIssued: issued.reduce((a, r) => a + r.qty, 0) };
+}
 
 function TotalRecall({ stock = [] }) {
-  const itemIds = [...new Set(stock.map((s) => s.itemId))]; const [itemId, setItemId] = useState(itemIds[0] || ITEMS[0]?.id || ""); const batches = stock.filter((s) => s.itemId === itemId).map((s) => s.batch); const [batch, setBatch] = useState(batches[0] || ""); const row = stock.find((s) => s.itemId === itemId && s.batch === batch) || stock.find((s) => s.itemId === itemId); const data = genRecall(Number(row?.qty || 0)); const selectedItem = itemOf(itemId);
-  return <><div className="section-title">Total Recall Product - ตรวจสอบการรับเข้า / จ่ายออก ต่อสินค้าและ Batch</div><div className="grid g2" style={{ marginBottom: 10 }}><div className="field"><label>เลือกสินค้า</label><select value={itemId} onChange={(e) => setItemId(e.target.value)}>{itemIds.map((id) => <option key={id} value={id}>{id} · {itemOf(id)?.name}</option>)}</select></div><div className="field"><label>เลือก Batch</label><select value={batch} onChange={(e) => setBatch(e.target.value)}>{[...new Set(batches)].map((b) => <option key={b} value={b}>{b}</option>)}</select></div></div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}><span className="profile-tag">SYNNEX ID: {selectedItem?.id}</span><span className="profile-tag">Brand: {selectedItem?.brand}</span><span className="profile-tag">Location: {row?.loc || "-"}</span></div><div className="recall-split"><div className="recall-col"><h4 style={{ color: "var(--success)" }}>รับเข้า (Receiving)</h4>{data.received.map((r) => <div className="recall-row" key={r.ref}><span>{r.ref} · {r.date}</span><span className="mono">+{r.qty}</span></div>)}<div className="recall-row" style={{ fontWeight: 700 }}><span>รวมรับเข้า</span><span className="mono">{data.totalReceived}</span></div></div><div className="recall-col"><h4 style={{ color: "var(--danger)" }}>จ่ายออก (Issue)</h4>{data.issued.map((r) => <div className="recall-row" key={r.ref}><span>{r.ref} · {r.date}</span><span className="mono">-{r.qty}</span></div>)}<div className="recall-row" style={{ fontWeight: 700 }}><span>รวมจ่ายออก</span><span className="mono">{data.totalIssued}</span></div></div></div><div className="card" style={{ marginTop: 16 }}><div className="recall-row"><span>คงเหลือคำนวณ</span><span className="mono">{data.totalReceived - data.totalIssued}</span></div><div className="recall-row"><span>คงเหลือจริงในระบบ (Location: {row?.loc || "-"})</span><span className="mono">{Number(row?.qty || 0).toLocaleString()}</span></div></div></>;
-}
+  const itemIds = [...new Set(stock.map((s) => s.itemId))];
+  const [itemId, setItemId] = useState(itemIds[0] || ITEMS[0]?.id || "");
+  const lots = stock.filter((s) => s.itemId === itemId).map(lotCodeOf).filter(Boolean);
+  const [lot, setLot] = useState(lots[0] || "");
+  useEffect(() => {
+    const nextLots = stock.filter((s) => s.itemId === itemId).map(lotCodeOf).filter(Boolean);
+    if (!nextLots.includes(lot)) setLot(nextLots[0] || "");
+  }, [itemId, stock.length]);
+  const row = stock.find((s) => s.itemId === itemId && lotCodeOf(s) === lot) || stock.find((s) => s.itemId === itemId);
+  const parsed = parseLotCode(lotCodeOf(row));
+  const data = genRecall(row, stock);
+  const selectedItem = itemOf(itemId);
+  return (
+    <>
+      <div className="section-title">Total Recall Product - ตรวจสอบรับเข้า / จ่ายออก ตาม SYNNEX ID และ Lot</div>
+      <div className="grid g2" style={{ marginBottom: 10 }}>
+        <div className="field"><label>เลือกสินค้า / SYNNEX ID</label><select value={itemId} onChange={(e) => setItemId(e.target.value)}>{itemIds.map((id) => <option key={id} value={id}>{id} · {itemOf(id)?.name}</option>)}</select></div>
+        <div className="field"><label>เลือก Lot</label><select value={lotCodeOf(row)} onChange={(e) => setLot(e.target.value)}>{[...new Set(lots)].map((b) => <option key={b} value={b}>{b}</option>)}</select></div>
+      </div>
 
+      <div className="lot-rule-panel">
+        <div className="lot-rule-head">
+          <div><h3>Lot Structure Detail</h3><p>แยก SYNNEX ID ออกจาก Lot เพื่อให้รู้รอบรับเข้า ต้นทุน สถานะสินค้า และ Aging ได้แม่นยำ</p></div>
+          <div className="lot-rule-formula"><span>SYNNEX ID</span><b>{selectedItem?.id || "-"}</b><i>+</i><span>LOT</span><b>{lotCodeOf(row) || "-"}</b></div>
+        </div>
+        <div className="lot-rule-grid">
+          <div className="lot-rule-card green"><b>Lot</b><strong>{lotCodeOf(row) || "-"}</strong><span>รหัสขึ้นต้นเพื่อบอกว่าเป็นข้อมูล Lot แยกจาก Master Item</span></div>
+          <div className="lot-rule-card blue"><b>Receive Date</b><strong>{parsed.receiveDate}</strong><span>2026 = ปีที่รับเข้า, 08 = เดือนที่รับเข้า, 26 = วันที่รับเข้า</span></div>
+          <div className="lot-rule-card amber"><b>Status / Cost</b><strong>{parsed.statusCode} · {parsed.costCode}</strong><span>01 = สินค้าขาย, 02 = สินค้า Demo, 03 = Hold/QC, 04 = Reject/Damage, xxxx = Cost Code</span></div>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+        <span className="profile-tag">SYNNEX ID: {selectedItem?.id}</span>
+        <span className="profile-tag">Brand: {selectedItem?.brand}</span>
+        <span className="profile-tag">Lot Status: {lotStatusLabelOf(parsed.statusCode)}</span>
+        <span className="profile-tag">Location: {row?.loc || "-"}</span>
+      </div>
+
+      <div className="recall-split">
+        <div className="recall-col">
+          <h4 style={{ color: "var(--success)" }}>รับเข้า (Receiving) ตาม Lot</h4>
+          {data.received.map((r) => <div className="recall-row" key={r.ref}><span>{r.ref} · {r.date} · <span className="mono">{r.lot}</span> · {r.loc}</span><span className="mono">+{r.qty}</span></div>)}
+          <div className="recall-row" style={{ fontWeight: 700 }}><span>รวมรับเข้า Lot นี้</span><span className="mono">{data.totalReceived}</span></div>
+        </div>
+        <div className="recall-col">
+          <h4 style={{ color: "var(--danger)" }}>จ่ายออก (Issue) ตาม Lot</h4>
+          {data.issued.map((r) => <div className="recall-row" key={r.ref}><span>{r.ref} · {r.date} · <span className="mono">{r.lot}</span> · {r.loc}</span><span className="mono">-{r.qty}</span></div>)}
+          <div className="recall-row" style={{ fontWeight: 700 }}><span>รวมจ่ายออก Lot นี้</span><span className="mono">{data.totalIssued}</span></div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="section-title" style={{ marginTop: 0 }}>Lot อื่นของสินค้าเดียวกัน</div>
+        <div className="table-wrap">
+          <table><thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Lot</th><th>Receive Date</th><th>LPN</th><th>Location</th><th>Qty</th><th>Status</th></tr></thead><tbody>{data.siblingLots.map((r) => <tr key={`${r.lot}-${r.lpn}`}><td className="mono">{itemId}</td><td>{selectedItem?.name || "-"}</td><td className="mono">{r.lot}</td><td className="mono">{r.receiveDate || "-"}</td><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.loc || "-"}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><StatusBadge code={r.status || "AVL"} /></td></tr>)}</tbody></table>
+        </div>
+        <div className="recall-row"><span>คงเหลือคำนวณ Lot นี้</span><span className="mono">{data.totalReceived - data.totalIssued}</span></div>
+        <div className="recall-row"><span>คงเหลือจริงในระบบ (Location: {row?.loc || "-"})</span><span className="mono">{Number(row?.qty || 0).toLocaleString()}</span></div>
+      </div>
+    </>
+  );
+}
 function TotalRecallPrework({ stickerTasks = [], stickerStock = [] }) {
   const tasks = stickerTasks.map((t) => {
     const item = itemOf(t.itemId);
@@ -7070,9 +7203,38 @@ function GlobalStyle() {
       .lp-plan .lp-progress-track{background:rgba(107,118,136,.11);}
       .lp-plan .lp-progress-fill{background:var(--tone) !important;}
       .lp-plan-tag{font-size:10px;border:1px solid rgba(79,125,232,.25);background:#FFFFFF;color:#4F7DE8;border-radius:10px;padding:2px 8px;margin-left:8px;text-transform:none;letter-spacing:0;box-shadow:0 2px 6px rgba(22,35,61,.05);}
+      .lot-rule-panel{border:1px solid rgba(23,169,192,.28);background:linear-gradient(135deg,#FFFFFF 0%,#F1FBFA 100%);border-radius:14px;padding:16px;margin:0 0 18px;box-shadow:0 10px 24px rgba(22,35,61,.06);}
+      .lot-rule-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:12px;}
+      .lot-rule-head h3{margin:0 0 4px;color:#0D3B2E;font-size:16px;}
+      .lot-rule-head p{margin:0;color:var(--muted);font-size:12px;}
+      .lot-rule-formula{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#FFFFFF;border:1px solid var(--border);border-radius:12px;padding:10px 12px;min-width:300px;}
+      .lot-rule-formula span{font-size:10.5px;color:var(--muted);font-weight:800;text-transform:uppercase;}
+      .lot-rule-formula b{font-family:'Space Grotesk';font-size:13px;color:#10203F;}
+      .lot-rule-formula i{font-style:normal;color:var(--teal);font-weight:900;}
+      .lot-rule-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+      .lot-rule-card{border-radius:12px;padding:12px;border:1px solid var(--border);background:#FFFFFF;}
+      .lot-rule-card b{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;}
+      .lot-rule-card strong{display:block;font-family:'Space Grotesk';font-size:19px;line-height:1.1;margin-bottom:6px;}
+      .lot-rule-card span{display:block;color:var(--muted);font-size:11.5px;line-height:1.35;}
+      .lot-rule-card.green strong{color:#0A7A43;}.lot-rule-card.blue strong{color:#2F67FF;}.lot-rule-card.amber strong{color:#A65D00;}
+      .lot-preview-card{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;background:linear-gradient(135deg,#ECFAF2,#EEF4FF);border:1px solid rgba(32,199,102,.24);border-radius:12px;padding:10px;margin:8px 0 12px;}
+      .lot-preview-card div{min-width:0;}
+      .lot-preview-card span{display:block;font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;margin-bottom:2px;}
+      .lot-preview-card b{display:block;color:#10203F;font-size:12.5px;white-space:normal;word-break:break-word;}
+      .lot-preview-card small{display:block;color:#0A7A43;font-size:10.5px;font-weight:700;margin-top:3px;}
+      @media (max-width:760px){.lot-rule-head{flex-direction:column;}.lot-rule-formula{min-width:0;width:100%;}.lot-rule-grid,.lot-preview-card{grid-template-columns:1fr;}.lot-preview-card>svg{display:none;}}
     `}</style>
   );
 }
+
+
+
+
+
+
+
+
+
 
 
 
