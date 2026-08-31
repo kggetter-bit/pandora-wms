@@ -5763,14 +5763,27 @@ function SynnexLotLocationSummary({ rows = [] }) {
 }
 
 function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => {}, notify = () => {}, confirmAction = ({ onConfirm }) => onConfirm?.(), userSession }) {
-  const [filters, setFilters] = useState({ date: "", item: "", name: "", lpn: "", loc: "", size: "", floor: "", status: "", brand: "", plant: "" });
+  const emptyFilters = { item: "", name: "", lpn: "", lot: "", loc: "", size: "", floor: "", status: "", brand: "", plant: "" };
+  const [filters, setFilters] = useState(emptyFilters);
   const [row, setRow] = useState(null);
   const [status, setStatus] = useState("AVL");
   const setF = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
-  const rows = inventoryRowsOf(stock).filter((r) =>
+  const allRows = inventoryRowsOf(stock);
+  const summaryByItem = allRows.reduce((acc, r) => {
+    const id = r.itemId;
+    if (!acc[id]) acc[id] = { lots: new Set(), locs: new Set(), plants: new Set(), totalQty: 0, maxAge: 0 };
+    acc[id].lots.add(lotCodeOf(r) || "-");
+    acc[id].locs.add(r.loc || "-");
+    acc[id].plants.add(r.locObj?.plant || "-");
+    acc[id].totalQty += Number(r.qty || 0);
+    acc[id].maxAge = Math.max(acc[id].maxAge, Number(r.days || r.age || 0));
+    return acc;
+  }, {});
+  const rows = allRows.filter((r) =>
     (!filters.item || r.itemId.includes(filters.item)) &&
     (!filters.name || (r.item?.name || "").toLowerCase().includes(filters.name.toLowerCase())) &&
     (!filters.lpn || (r.lpn || "").toLowerCase().includes(filters.lpn.toLowerCase())) &&
+    (!filters.lot || (lotCodeOf(r) || "").toLowerCase().includes(filters.lot.toLowerCase())) &&
     (!filters.loc || (r.loc || "").toLowerCase().includes(filters.loc.toLowerCase())) &&
     (!filters.size || r.sizeCode === filters.size) &&
     (!filters.plant || r.locObj?.plant === filters.plant) &&
@@ -5781,36 +5794,62 @@ function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => 
   const submit = () => {
     if (!row) return;
     setStock((list) => list.map((r) => (r.key === row.key ? { ...r, status } : r)));
-    addTx({ type: "Status Change", detail: `${row.lpn || row.key}: ${row.status} -> ${status} · Lot ${lotCodeOf(row) || "-"} by ${userSession?.user || "system"}`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), loc: row.loc, user: userSession?.user || "system" });
-    notify("ปรับ Status สำเร็จ", `${row.lpn || row.itemId} เป็น ${status}`, "success");
+    addTx({ type: "Status Change", detail: `${row.lpn || row.key}: ${row.status} -> ${status} - Lot ${lotCodeOf(row) || "-"} by ${userSession?.user || "system"}`, itemId: row.itemId, lpn: row.lpn, lot: lotCodeOf(row), lotCode: lotCodeOf(row), loc: row.loc, user: userSession?.user || "system" });
+    notify("Status updated", `${row.lpn || row.itemId} -> ${status}`, "success");
     setRow(null);
   };
+  const clearFilters = () => setFilters(emptyFilters);
   return (
     <>
       <div className="section-title">Inventory Overview</div>
-      <ProductRegisterBoard title="Inventory Overview Register" subtitle={`${rows.length} LPN records · status, sticker, location, size, utilization`} rows={rows.map(registerRowFromInventory)} />
-      <SynnexLotLocationSummary rows={rows} />
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="grid g4">
           <div className="field"><label>SYNNEX ID</label><input value={filters.item} onChange={(e) => setF("item", e.target.value)} /></div>
           <div className="field"><label>Item Name</label><input value={filters.name} onChange={(e) => setF("name", e.target.value)} /></div>
           <div className="field"><label>LPN</label><input value={filters.lpn} onChange={(e) => setF("lpn", e.target.value)} /></div>
+          <div className="field"><label>Lot</label><input value={filters.lot} onChange={(e) => setF("lot", e.target.value)} placeholder="Lot20260826-01-A001" /></div>
           <div className="field"><label>Location</label><input value={filters.loc} onChange={(e) => setF("loc", e.target.value)} /></div>
-          <div className="field"><label>Size</label><select value={filters.size} onChange={(e) => setF("size", e.target.value)}><option value="">ทั้งหมด</option>{SIZE_GROUPS.map((s) => <option key={s.code}>{s.code}</option>)}</select></div>
-          <div className="field"><label>Plant / WH</label><select value={filters.plant} onChange={(e) => setF("plant", e.target.value)}><option value="">ทุก Plant</option>{PLANTS.map((p) => <option key={p.id} value={p.id}>{p.erpCode} · {p.name}</option>)}</select></div>
+          <div className="field"><label>Size</label><select value={filters.size} onChange={(e) => setF("size", e.target.value)}><option value="">All</option>{SIZE_GROUPS.map((s) => <option key={s.code}>{s.code}</option>)}</select></div>
+          <div className="field"><label>Plant / WH</label><select value={filters.plant} onChange={(e) => setF("plant", e.target.value)}><option value="">All Plant</option>{PLANTS.map((p) => <option key={p.id} value={p.id}>{p.erpCode} - {p.name}</option>)}</select></div>
           <div className="field"><label>Floor</label><input value={filters.floor} onChange={(e) => setF("floor", e.target.value)} /></div>
-          <div className="field"><label>Status</label><select value={filters.status} onChange={(e) => setF("status", e.target.value)}><option value="">ทั้งหมด</option>{STATUS_LIST.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></div>
+          <div className="field"><label>Status</label><select value={filters.status} onChange={(e) => setF("status", e.target.value)}><option value="">All</option>{STATUS_LIST.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></div>
           <div className="field"><label>Brand</label><input value={filters.brand} onChange={(e) => setF("brand", e.target.value)} /></div>
         </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="scan-step"><PackageSearch size={11} /> {rows.length} / {allRows.length} LPN</span>
+          <span className="scan-step"><Tags size={11} /> {new Set(rows.map((r) => lotCodeOf(r) || "-")).size} Lot</span>
+          <span className="scan-step"><MapPinned size={11} /> {new Set(rows.map((r) => r.loc || "-")).size} Location</span>
+          <span className="scan-step"><Warehouse size={11} /> {new Set(rows.map((r) => r.locObj?.plant || "-")).size} Plant</span>
+          <button className="btn secondary" onClick={clearFilters}><RefreshCw size={13} /> Clear Filter</button>
+        </div>
       </div>
-      <div className="table-wrap"><table><thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Plant / WH</th><th>Floor</th><th>Qty</th><th>Status</th><th>Utilization / Pallet-Basket</th><th></th></tr></thead><tbody>
-        {rows.map((r) => <tr key={r.key || `${r.loc}-${r.itemId}`}><td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td><td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td><span className={`scan-step ${r.sticker.ok ? "done" : "active"}`}>{r.sticker.label}</span></td><td className="mono">{lotCodeOf(r) || "-"}</td><td className="mono">{r.loc}</td><td>{plantLabelOf(r.locObj?.plant)}</td><td>{r.floorName}</td><td>{Number(r.qty || 0).toLocaleString()}</td><td><StatusBadge code={r.status || "AVL"} /></td><td>{utilizationBar(r.util)}<div className="kpi-sub">cap {r.palletCap}</div></td><td><button className="btn secondary" onClick={() => { setRow(r); setStatus(r.status || "AVL"); }}><Edit3 size={12} /> ปรับ Status</button></td></tr>)}
-      </tbody></table></div>
-      {row && <Modal onClose={() => setRow(null)} width={420}><h2>ปรับ Status ราย LPN</h2><div className="kpi-sub" style={{ marginBottom: 12 }}>{row.lpn || row.key} · {row.itemId} · {row.loc}</div><div className="field"><label>Status ใหม่</label><select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS_LIST.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></div><button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => confirmAction({ title: "ยืนยันปรับ Status", message: `ปรับ ${row.lpn || row.itemId} เป็น ${status}?`, onConfirm: submit })}>ยืนยัน</button></Modal>}
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Size</th><th>Sticker</th><th>Lot</th><th>Location</th><th>Plant / WH</th><th>Floor</th><th>Qty</th><th>Item Qty</th><th>Lots / Loc / Plant</th><th>Aging</th><th>Status</th><th>Utilization / Pallet-Basket</th><th></th></tr></thead>
+          <tbody>
+            {rows.map((r) => {
+              const sum = summaryByItem[r.itemId] || { lots: new Set(), locs: new Set(), plants: new Set(), totalQty: 0, maxAge: 0 };
+              const age = ageBucket(r.days || r.age || 0);
+              return (
+                <tr key={r.key || `${r.loc}-${r.itemId}`}>
+                  <td className="mono">{r.lpn || "-"}</td><td className="mono">{r.itemId}</td><td>{r.item?.name || "-"}</td><td>{r.item?.brand || "-"}</td>
+                  <td><span className={sizeChipClass(r.sizeCode)}>{r.sizeCode}</span></td><td><span className={`scan-step ${r.sticker.ok ? "done" : "active"}`}>{r.sticker.label}</span></td>
+                  <td className="mono">{lotCodeOf(r) || "-"}</td><td className="mono">{r.loc}</td><td>{plantLabelOf(r.locObj?.plant)}</td><td>{r.floorName}</td>
+                  <td>{Number(r.qty || 0).toLocaleString()}</td><td>{Number(sum.totalQty || 0).toLocaleString()}</td>
+                  <td><span className="mono">{sum.lots.size}</span> / <span className="mono">{sum.locs.size}</span> / <span className="mono">{sum.plants.size}</span><div className="kpi-sub">Max Aging {sum.maxAge} days</div></td>
+                  <td><span className={`age-chip ${age.cls}`}>{Number(r.days || r.age || 0)} days</span></td><td><StatusBadge code={r.status || "AVL"} /></td>
+                  <td>{utilizationBar(r.util)}<div className="kpi-sub">util {r.util}% - cap {r.palletCap}</div></td>
+                  <td><button className="btn secondary" onClick={() => { setRow(r); setStatus(r.status || "AVL"); }}><Edit3 size={12} /> Status</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {row && <Modal onClose={() => setRow(null)} width={420}><h2>Adjust LPN Status</h2><div className="kpi-sub" style={{ marginBottom: 12 }}>{row.lpn || row.key} - {row.itemId} - {row.loc}</div><div className="field"><label>New Status</label><select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS_LIST.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}</select></div><button className="btn" style={{ width: "100%", justifyContent: "center" }} onClick={() => confirmAction({ title: "Confirm Status Change", message: `Change ${row.lpn || row.itemId} to ${status}?`, onConfirm: submit })}>Confirm</button></Modal>}
     </>
   );
 }
-
 function AgingLpnDetail({ row, projects = [], onClose, onUnallocate, onForce }) {
   const age = ageBucket(row.days || 0);
   return (
@@ -7430,6 +7469,7 @@ function GlobalStyle() {
     `}</style>
   );
 }
+
 
 
 
