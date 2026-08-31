@@ -5683,6 +5683,85 @@ function inventoryRowsOf(stock) {
   });
 }
 
+function SynnexLotLocationSummary({ rows = [] }) {
+  const [itemFilter, setItemFilter] = useState("ALL");
+  const grouped = Object.values(rows.reduce((acc, r) => {
+    const id = r.itemId;
+    if (!acc[id]) acc[id] = { itemId: id, item: r.item, lots: new Set(), locs: new Set(), plants: new Set(), qty: 0, maxAge: 0, avgUtil: 0, utilSum: 0, count: 0 };
+    acc[id].lots.add(lotCodeOf(r) || "-");
+    acc[id].locs.add(r.loc || "-");
+    acc[id].plants.add(r.locObj?.plant || "-");
+    acc[id].qty += Number(r.qty || 0);
+    acc[id].maxAge = Math.max(acc[id].maxAge, Number(r.days || r.age || 0));
+    acc[id].utilSum += Number(r.util || 0);
+    acc[id].count += 1;
+    acc[id].avgUtil = Math.round(acc[id].utilSum / Math.max(1, acc[id].count));
+    return acc;
+  }, {})).sort((a, b) => b.qty - a.qty);
+  const activeIds = ["ALL", ...grouped.map((g) => g.itemId)];
+  const lotRows = rows
+    .filter((r) => itemFilter === "ALL" || r.itemId === itemFilter)
+    .sort((a, b) => String(a.itemId).localeCompare(String(b.itemId)) || String(lotCodeOf(a)).localeCompare(String(lotCodeOf(b))));
+  return (
+    <div className="synnex-lot-panel">
+      <div className="synnex-lot-head">
+        <div>
+          <h3>SYNNEX ID / Lot / Location / Plant Summary</h3>
+          <p>ดูว่าสินค้าแต่ละรหัสกระจายอยู่กี่ Lot, กี่ Location, กี่ Plant พร้อม Aging และ Utilization ของแต่ละ Lot</p>
+        </div>
+        <div className="field">
+          <label>เลือก SYNNEX ID</label>
+          <select value={itemFilter} onChange={(e) => setItemFilter(e.target.value)}>
+            {activeIds.map((id) => <option key={id} value={id}>{id === "ALL" ? "ทุก SYNNEX ID" : `${id} · ${itemOf(id)?.name || ""}`}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="grid g4" style={{ marginBottom: 12 }}>
+        {grouped.slice(0, 4).map((g) => (
+          <div className="synnex-summary-card" key={g.itemId}>
+            <div className="mono">{g.itemId}</div>
+            <b>{g.item?.brand || "-"} · {g.item?.name || "-"}</b>
+            <div className="synnex-summary-kpis">
+              <span>{g.lots.size} Lot</span>
+              <span>{g.locs.size} Location</span>
+              <span>{g.plants.size} Plant</span>
+            </div>
+            <div className="recall-row"><span>Total Qty</span><strong>{g.qty.toLocaleString()}</strong></div>
+            <div className="recall-row"><span>Max Aging</span><strong>{g.maxAge} วัน</strong></div>
+            {utilizationBar(g.avgUtil)}
+          </div>
+        ))}
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Lot</th><th>LPN</th><th>Plant</th><th>Location</th><th>Floor</th><th>Qty</th><th>Aging</th><th>Utilization</th><th>Status</th></tr></thead>
+          <tbody>
+            {lotRows.map((r) => {
+              const age = ageBucket(r.days || r.age || 0);
+              return (
+                <tr key={`${r.key}-${lotCodeOf(r)}-${r.loc}`}>
+                  <td className="mono">{r.itemId}</td>
+                  <td>{r.item?.name || "-"}</td>
+                  <td>{r.item?.brand || "-"}</td>
+                  <td className="mono">{lotCodeOf(r) || "-"}</td>
+                  <td className="mono">{r.lpn || "-"}</td>
+                  <td>{plantLabelOf(r.locObj?.plant)}</td>
+                  <td className="mono">{r.loc || "-"}</td>
+                  <td>{r.floorName || "-"}</td>
+                  <td>{Number(r.qty || 0).toLocaleString()}</td>
+                  <td><span className={`age-chip ${age.cls}`}>{Number(r.days || r.age || 0)} วัน</span></td>
+                  <td>{utilizationBar(r.util)}</td>
+                  <td><StatusBadge code={r.status || "AVL"} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => {}, notify = () => {}, confirmAction = ({ onConfirm }) => onConfirm?.(), userSession }) {
   const [filters, setFilters] = useState({ date: "", item: "", name: "", lpn: "", loc: "", size: "", floor: "", status: "", brand: "", plant: "" });
   const [row, setRow] = useState(null);
@@ -5710,6 +5789,7 @@ function InventoryHoldOverview({ stock = [], setStock = () => {}, addTx = () => 
     <>
       <div className="section-title">Inventory Overview</div>
       <ProductRegisterBoard title="Inventory Overview Register" subtitle={`${rows.length} LPN records · status, sticker, location, size, utilization`} rows={rows.map(registerRowFromInventory)} />
+      <SynnexLotLocationSummary rows={rows} />
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="grid g4">
           <div className="field"><label>SYNNEX ID</label><input value={filters.item} onChange={(e) => setF("item", e.target.value)} /></div>
@@ -7249,6 +7329,17 @@ function GlobalStyle() {
       .api-line-tag{display:inline-flex;border-radius:999px;padding:4px 8px;font-size:10.5px;font-weight:900;border:1px solid;}
       .api-line-tag.api{background:rgba(62,126,224,.12);border-color:rgba(62,126,224,.28);color:#2F67FF;}
       .api-line-tag.done{background:rgba(62,199,117,.12);border-color:rgba(62,199,117,.28);color:#0A7A43;}
+      .synnex-lot-panel{background:#FFFFFF;border:1px solid var(--border);border-radius:14px;padding:14px;margin:14px 0;box-shadow:0 10px 24px rgba(21,35,58,.05);}
+      .synnex-lot-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:12px;}
+      .synnex-lot-head h3{margin:0;font-family:'Space Grotesk';font-size:15px;color:#17213A;}
+      .synnex-lot-head p{margin:4px 0 0;color:#637089;font-size:12px;font-weight:700;}
+      .synnex-lot-head .field{min-width:320px;margin-bottom:0;}
+      .synnex-summary-card{border:1px solid #DDE6F2;background:linear-gradient(135deg,#F8FBFF,#FFFFFF);border-radius:12px;padding:12px;}
+      .synnex-summary-card>.mono{font-size:12px;color:#2F67FF;font-weight:900;margin-bottom:4px;}
+      .synnex-summary-card>b{display:block;color:#17213A;font-size:12.5px;line-height:1.3;margin-bottom:9px;}
+      .synnex-summary-kpis{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+      .synnex-summary-kpis span{border-radius:999px;background:#EEF4FF;color:#2F67FF;font-size:10.5px;font-weight:900;padding:4px 8px;}
+      @media (max-width:900px){.synnex-lot-head{flex-direction:column;}.synnex-lot-head .field{min-width:0;width:100%;}}
       @media (max-width:1500px){.exec-inventory-grid{grid-template-columns:1fr;}.donut-pair-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.compact-donut-wrap{grid-template-columns:180px 1fr;grid-template-rows:auto;justify-items:stretch;min-height:220px;}.exec-service-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.backlog-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
       @media (max-width:1280px){.cs-dashboard-panel .grid.g4{grid-template-columns:repeat(2,minmax(0,1fr));}}
       @media (max-width:1100px){.exec-kpi-grid,.exec-main-grid,.exec-bottom-grid{grid-template-columns:1fr 1fr;}.warehouse-status-body{grid-template-columns:1fr;}.warehouse-metrics{grid-template-columns:1fr 1fr 1fr;}.inventory-donut-wrap{flex-direction:column;align-items:flex-start;}.sales-matrix{grid-template-columns:130px repeat(3,minmax(120px,1fr)) 120px;}.topbar{height:auto;min-height:60px;padding:10px 16px;align-items:flex-start;}.topbar-right{flex-wrap:wrap;justify-content:flex-end;gap:8px;}}
