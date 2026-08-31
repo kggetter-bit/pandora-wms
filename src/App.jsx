@@ -457,6 +457,7 @@ const NAV_GROUPS = [
       { id: "optimization", label: "AI Optimization Control", icon: BrainCircuit },
       { id: "wes", label: "WES Control Tower", icon: Bot },
       { id: "exceptions", label: "Exception Center", icon: ShieldAlert },
+      { id: "flowmap", label: "Flow Upgrade Map", icon: ListTree },
     ]
   },
   {
@@ -501,6 +502,29 @@ const NAV_GROUPS = [
   },
 ];
 const STAGES = ["Receiving", "Put-away", "Picking", "Packing", "Shipping"];
+
+const FLOW_UPGRADE_STEPS = [
+  { id: "master", title: "Master Data", old: "ตั้ง Item / Location / Status แยกตามหน้า", latest: "เพิ่มโครง Item + Lot + Size + Sticker + Aging Rule + Plant mapping ให้เป็นฐานเดียว", status: "added", owner: "Master Data", network: "DB กลาง Item/Lot/Plant" },
+  { id: "appointment", title: "Dock / ASN", old: "จอง Dock และ PO ตัวอย่าง", latest: "เชื่อมเส้น ASN/PO ไป Receiving พร้อมรองรับหลายรายการใน PO เดียว", status: "added", owner: "Inbound", network: "ASN/PO API placeholder" },
+  { id: "receiving", title: "Receiving Handheld", old: "รับสินค้าเข้าและออก LPN", latest: "เพิ่ม Receive date, MFG date, Aging reject, Plant mismatch, SN/IMEI, Lot generation", status: "added", owner: "Receiving", network: "Handheld + Serial registry" },
+  { id: "staging", title: "Staging Area", old: "รับแล้วเข้าคลังโดยตรงบางกรณี", latest: "ทุกการรับเข้าต้องเข้า Staging/QC ก่อน หรือ Bypass to Prework แบบมีเหตุผล", status: "added", owner: "Inventory", network: "Location capacity engine" },
+  { id: "putaway", title: "Putaway & Move", old: "ย้าย Location และบันทึก transaction", latest: "คง Lot/Cost/Receive date เมื่อย้าย, เพิ่ม handheld move task และ ASRS to Prework route", status: "added", owner: "Warehouse", network: "WES/ASRS API placeholder" },
+  { id: "prework", title: "Prework / Sticker", old: "ติดสติกเกอร์เป็นใบงาน", latest: "เพิ่ม Priority recommendation, machine 7 เครื่อง, Sticker stock, Sticker lot recall, ห้ามลัดขั้นตอนด้วย state", status: "added", owner: "Prework", network: "Machine counter / PLC placeholder" },
+  { id: "allocation", title: "Allocation", old: "กดจอง stock จาก Order", latest: "เพิ่ม ATP, เลือก location, Partial allocate, Shortage, Sticker block, Release แยกจาก Allocate", status: "added", owner: "Order Control", network: "OMS reservation API placeholder" },
+  { id: "pick", title: "Picking", old: "Pick task แสดงตามงาน", latest: "แสดงเฉพาะ Order ที่ Release แล้ว, validate Location/SYNNEX/Lot/SN/IMEI, Completed แล้วไม่ให้ pick ซ้ำ", status: "added", owner: "Picking", network: "RF scanner validation" },
+  { id: "console", title: "Console Order", old: "ยังติดตามการรวมของได้จำกัด", latest: "เห็นของจากหลายชั้น/หลาย location รวมไป Pack ชั้น 1 พร้อมต่อยอด conveyor", status: "added", owner: "Console", network: "Conveyor route placeholder" },
+  { id: "pack", title: "Packing", old: "Pack จาก Order ที่หยิบแล้ว", latest: "เพิ่ม scan LPN/Box/SYNNEX/SN/IMEI, VDO completed, cancel alert จาก Sales API mock", status: "added", owner: "Packing", network: "Camera + OMS cancel webhook" },
+  { id: "ship", title: "Shipping", old: "ปิด Order และตัด stock", latest: "เพิ่ม Ship to truck, AWB/Bill/PO, Load staging และตัด stock พร้อม transaction", status: "added", owner: "Shipping", network: "TMS/Carrier/ERP GI placeholder" },
+  { id: "return", title: "Return / RI", old: "รับคืนตาม ticket", latest: "เพิ่ม tracking ตั้งแต่ CS เปิด ticket, carrier pickup, warehouse QC, photo/video, return transaction", status: "added", owner: "Returns", network: "CS + TMS return API" },
+  { id: "ledger", title: "Transaction Ledger", old: "log ในหน้าเว็บ", latest: "เพิ่ม user, timestamp, lot, LPN, from/to location เพื่อสอบย้อนกลับทุกกิจกรรม", status: "added", owner: "Audit", network: "Append-only DB required" },
+  { id: "dashboard", title: "Dashboard / KPI", old: "สรุปภาพรวมจากข้อมูลตัวอย่าง", latest: "เพิ่ม backlog 24 ชม., OTIF, Productivity, External WH, Sales Matrix, Recall Product/Prework", status: "added", owner: "BI", network: "Data mart / ETL required" },
+];
+
+const FLOW_STATUS_STYLE = {
+  added: { label: "เพิ่มแล้ว", bg: "rgba(62,199,117,.14)", color: "var(--success)", border: "rgba(62,199,117,.35)" },
+  api: { label: "วางเส้น API", bg: "rgba(62,126,224,.14)", color: "var(--blue)", border: "rgba(62,126,224,.35)" },
+  improve: { label: "ต้องต่อยอด", bg: "rgba(245,168,60,.16)", color: "var(--amber)", border: "rgba(245,168,60,.38)" },
+};
 
 /* ================================================================== */
 /* HELPERS                                                              */
@@ -1173,6 +1197,7 @@ export default function App() {
             {view === "optimization" && <OptimizationControl {...ctx} />}
             {view === "wes" && <WesControlTower {...ctx} />}
             {view === "exceptions" && <ExceptionCenter {...ctx} />}
+            {view === "flowmap" && <FlowUpgradeMap />}
             {view === "integrations" && <Integrations />}
             {view === "dispatch" && <DispatchPlanning {...ctx} />}
             {view === "ai" && <AILog log={aiLog} />}
@@ -6484,6 +6509,80 @@ function ExceptionCenter({ stock = [], poList = [], allocOrders = [], pickTasks 
 /* INTEGRATIONS + DISPATCH PLANNING + AI LOG                           */
 /* ================================================================== */
 
+function FlowUpgradeMap() {
+  const addedCount = FLOW_UPGRADE_STEPS.filter((s) => s.status === "added").length;
+  const apiCount = FLOW_UPGRADE_STEPS.filter((s) => s.network.includes("placeholder") || s.network.includes("required")).length;
+  const lanes = [
+    { title: "Inbound", ids: ["master", "appointment", "receiving", "staging", "putaway"] },
+    { title: "Prework", ids: ["prework", "putaway"] },
+    { title: "Outbound", ids: ["allocation", "pick", "console", "pack", "ship"] },
+    { title: "After Sales / Control", ids: ["return", "ledger", "dashboard"] },
+  ];
+  const stepById = Object.fromEntries(FLOW_UPGRADE_STEPS.map((s) => [s.id, s]));
+  return (
+    <>
+      <div className="section-title">Flow Upgrade Map - เดิม vs ล่าสุด</div>
+      <div className="grid g3" style={{ marginBottom: 14 }}>
+        <LpCard icon={CheckCircle2} label="เสริมในโปรแกรมแล้ว" value={`${addedCount} จุด`} sub="ไม่ลบฟีเจอร์เดิม เพิ่ม layer เชื่อม flow" variant="good" progress={100} />
+        <LpCard icon={Radio} label="เส้น API ที่วางไว้ก่อน" value={`${apiCount} เส้น`} sub="ERP / OMS / TMS / WES / Handheld / Machine" variant="plan" progress={72} />
+        <LpCard icon={ShieldCheck} label="Traceability Backbone" value="SYNNEX + Lot + LPN" sub="โยง User, Time, Location, SN/IMEI" variant="info" progress={88} />
+      </div>
+
+      <div className="flow-map-board">
+        {lanes.map((lane) => (
+          <div className="flow-lane" key={lane.title}>
+            <div className="flow-lane-title">{lane.title}</div>
+            <div className="flow-step-row">
+              {lane.ids.map((id, idx) => {
+                const step = stepById[id];
+                const style = FLOW_STATUS_STYLE[step.status] || FLOW_STATUS_STYLE.improve;
+                return (
+                  <React.Fragment key={`${lane.title}-${id}-${idx}`}>
+                    <div className="flow-step-card" style={{ background: style.bg, borderColor: style.border }}>
+                      <div className="flow-step-head">
+                        <strong>{step.title}</strong>
+                        <span style={{ color: style.color, borderColor: style.border }}>{style.label}</span>
+                      </div>
+                      <p>{step.latest}</p>
+                      <small>{step.network}</small>
+                    </div>
+                    {idx < lane.ids.length - 1 && <div className="flow-arrow">→</div>}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="section-title" style={{ marginTop: 0 }}>ตารางเทียบ Flow เดิม vs Flow ล่าสุด</div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Flow</th><th>เดิม</th><th>ล่าสุดที่เสริมแล้ว</th><th>โครงข่ายที่ต้องต่อจริง</th><th>Owner</th><th>Status</th></tr></thead>
+            <tbody>
+              {FLOW_UPGRADE_STEPS.map((s) => {
+                const style = FLOW_STATUS_STYLE[s.status] || FLOW_STATUS_STYLE.improve;
+                const apiOnly = s.network.includes("placeholder") || s.network.includes("required");
+                return (
+                  <tr key={s.id}>
+                    <td><b>{s.title}</b></td>
+                    <td>{s.old}</td>
+                    <td>{s.latest}</td>
+                    <td><span className={`api-line-tag ${apiOnly ? "api" : "done"}`}>{s.network}</span></td>
+                    <td>{s.owner}</td>
+                    <td><span className="flow-status-pill" style={{ background: style.bg, color: style.color, borderColor: style.border }}>{style.label}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Integrations() {
   const [status, setStatus] = useState(() => SYSTEMS.map(() => ({ online: Math.random() > 0.12, latency: rand(8, 120) })));
   const toggle = (i) => setStatus((s) => s.map((x, idx) => (idx === i ? { ...x, online: !x.online } : x)));
@@ -7136,6 +7235,20 @@ function GlobalStyle() {
       .cs-dashboard-panel .lp-card{padding:13px;border-radius:12px;}
       .cs-dashboard-panel .lp-value{font-size:21px;}
       .cs-dashboard-panel .lp-panel{background:#F8FBFF;border-color:#E8EEF7;}
+      .flow-map-board{display:grid;gap:14px;margin-top:10px;}
+      .flow-lane{background:#FFFFFF;border:1px solid var(--border);border-radius:14px;padding:14px;box-shadow:0 10px 24px rgba(21,35,58,.05);}
+      .flow-lane-title{font-family:'Space Grotesk';font-size:14px;font-weight:800;color:#17213A;margin-bottom:10px;}
+      .flow-step-row{display:flex;align-items:stretch;gap:8px;overflow-x:auto;padding-bottom:4px;}
+      .flow-step-card{min-width:220px;max-width:260px;border:1px solid;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;}
+      .flow-step-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+      .flow-step-head strong{font-size:13px;color:#17213A;line-height:1.2;}
+      .flow-step-head span,.flow-status-pill{border:1px solid;border-radius:999px;padding:3px 8px;font-size:10.5px;font-weight:900;white-space:nowrap;}
+      .flow-step-card p{margin:0;color:#43516A;font-size:11.5px;line-height:1.42;font-weight:700;}
+      .flow-step-card small{color:#2F67FF;font-size:10.5px;font-weight:900;}
+      .flow-arrow{display:flex;align-items:center;color:#8A96A8;font-family:'Space Grotesk';font-size:22px;font-weight:900;padding:0 2px;}
+      .api-line-tag{display:inline-flex;border-radius:999px;padding:4px 8px;font-size:10.5px;font-weight:900;border:1px solid;}
+      .api-line-tag.api{background:rgba(62,126,224,.12);border-color:rgba(62,126,224,.28);color:#2F67FF;}
+      .api-line-tag.done{background:rgba(62,199,117,.12);border-color:rgba(62,199,117,.28);color:#0A7A43;}
       @media (max-width:1500px){.exec-inventory-grid{grid-template-columns:1fr;}.donut-pair-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.compact-donut-wrap{grid-template-columns:180px 1fr;grid-template-rows:auto;justify-items:stretch;min-height:220px;}.exec-service-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.backlog-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}
       @media (max-width:1280px){.cs-dashboard-panel .grid.g4{grid-template-columns:repeat(2,minmax(0,1fr));}}
       @media (max-width:1100px){.exec-kpi-grid,.exec-main-grid,.exec-bottom-grid{grid-template-columns:1fr 1fr;}.warehouse-status-body{grid-template-columns:1fr;}.warehouse-metrics{grid-template-columns:1fr 1fr 1fr;}.inventory-donut-wrap{flex-direction:column;align-items:flex-start;}.sales-matrix{grid-template-columns:130px repeat(3,minmax(120px,1fr)) 120px;}.topbar{height:auto;min-height:60px;padding:10px 16px;align-items:flex-start;}.topbar-right{flex-wrap:wrap;justify-content:flex-end;gap:8px;}}
