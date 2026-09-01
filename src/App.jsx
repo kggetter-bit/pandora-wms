@@ -5590,6 +5590,192 @@ function Picking() {
   );
 }
 
+function warehouseUtilizationOf(stock = []) {
+  const rowsByLocation = LOCATIONS.map((loc) => {
+    const rows = stock.filter((r) => r.loc === loc.code);
+    const used = rows.reduce((sum, r) => sum + Number(r.qty || 0), 0);
+    const capacity = Number(loc.capacity || 0);
+    const utilization = capacity ? Math.round((used / capacity) * 100) : 0;
+    return {
+      ...loc,
+      used,
+      capacity,
+      free: Math.max(0, capacity - used),
+      utilization: Math.min(100, utilization),
+      itemCount: new Set(rows.map((r) => r.itemId)).size,
+      lotCount: new Set(rows.map((r) => lotCodeOf(r)).filter(Boolean)).size,
+      plantLabel: plantLabelOf(loc.plant),
+      floorLabel: floorOf(loc.floor)?.name || loc.floor || "-",
+    };
+  });
+  const totalCapacity = rowsByLocation.reduce((sum, r) => sum + r.capacity, 0);
+  const totalUsed = rowsByLocation.reduce((sum, r) => sum + r.used, 0);
+  const totalFree = Math.max(0, totalCapacity - totalUsed);
+  const totalUtilization = totalCapacity ? Math.round((totalUsed / totalCapacity) * 100) : 0;
+  const byPlant = PLANTS.map((plant) => {
+    const rows = rowsByLocation.filter((r) => r.plant === plant.id);
+    const capacity = rows.reduce((sum, r) => sum + r.capacity, 0);
+    const used = rows.reduce((sum, r) => sum + r.used, 0);
+    return {
+      name: `${plant.erpCode} ${plant.id}`,
+      detail: plant.name,
+      used,
+      free: Math.max(0, capacity - used),
+      capacity,
+      utilization: capacity ? Math.round((used / capacity) * 100) : 0,
+      storageCost: plant.storageCost,
+    };
+  });
+  const byFloor = FLOORS.map((floor) => {
+    const rows = rowsByLocation.filter((r) => r.floor === floor.id);
+    const capacity = rows.reduce((sum, r) => sum + r.capacity, 0);
+    const used = rows.reduce((sum, r) => sum + r.used, 0);
+    return {
+      name: floor.name,
+      floorId: floor.id,
+      used,
+      free: Math.max(0, capacity - used),
+      capacity,
+      utilization: capacity ? Math.round((used / capacity) * 100) : 0,
+    };
+  });
+  const byZone = Object.values(rowsByLocation.reduce((acc, r) => {
+    const key = `${r.plant}-${r.zone}`;
+    if (!acc[key]) acc[key] = { name: `${r.plant} / Zone ${r.zone}`, used: 0, capacity: 0, locations: 0 };
+    acc[key].used += r.used;
+    acc[key].capacity += r.capacity;
+    acc[key].locations += 1;
+    return acc;
+  }, {})).map((r) => ({
+    ...r,
+    free: Math.max(0, r.capacity - r.used),
+    utilization: r.capacity ? Math.round((r.used / r.capacity) * 100) : 0,
+  })).sort((a, b) => b.utilization - a.utilization);
+  return {
+    rowsByLocation,
+    totalCapacity,
+    totalUsed,
+    totalFree,
+    totalUtilization,
+    byPlant,
+    byFloor,
+    byZone,
+    hotLocations: rowsByLocation.filter((r) => r.utilization >= 80).length,
+    openLocations: rowsByLocation.filter((r) => r.utilization <= 30).length,
+  };
+}
+
+function WarehouseUtilizationDashboard({ stock = [] }) {
+  const data = warehouseUtilizationOf(stock);
+  const donutRows = [
+    { name: "Used Space", value: data.totalUsed, color: "#3E7EE0" },
+    { name: "Free Space", value: data.totalFree, color: "#3EC775" },
+  ];
+  const locationRows = data.rowsByLocation
+    .slice()
+    .sort((a, b) => b.utilization - a.utilization || String(a.code).localeCompare(String(b.code)));
+  return (
+    <div className="wh-util-dashboard">
+      <div className="section-title small">Warehouse Utilization Dashboard</div>
+      <div className="grid g4">
+        <LpCard icon={Gauge} label="Total Utilization" value={`${data.totalUtilization}%`} sub={`${data.totalUsed.toLocaleString()} / ${data.totalCapacity.toLocaleString()} capacity`} progress={data.totalUtilization} tone="blue" />
+        <LpCard icon={Boxes} label="Used Capacity" value={data.totalUsed.toLocaleString()} sub="Current stock in all locations" variant="good" tone="green" />
+        <LpCard icon={PackageCheck} label="Free Capacity" value={data.totalFree.toLocaleString()} sub={`${Math.max(0, 100 - data.totalUtilization)}% available space`} variant="plan" tone="cyan" />
+        <LpCard icon={MapPinned} label="Hot Locations" value={data.hotLocations.toLocaleString()} sub={`${data.openLocations} locations still below 30%`} variant={data.hotLocations ? "bad" : "info"} tone="amber" />
+      </div>
+      <div className="grid g2">
+        <div className="lp-panel wh-util-panel">
+          <h3>Utilization by Plant</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={data.byPlant} margin={{ top: 8, right: 16, left: -14, bottom: 8 }}>
+              <CartesianGrid stroke="#E8EEF7" strokeDasharray="3 3" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+              <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+              <Tooltip {...lightTooltip} formatter={(v, n) => n === "utilization" ? [`${v}%`, "Utilization"] : [Number(v).toLocaleString(), n]} />
+              <Bar dataKey="utilization" fill="#3E7EE0" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="lp-panel wh-util-panel">
+          <h3>Used / Free Capacity</h3>
+          <div className="wh-util-donut-row">
+            <ResponsiveContainer width="45%" height={235}>
+              <PieChart>
+                <Pie data={donutRows} dataKey="value" innerRadius={58} outerRadius={88} paddingAngle={3}>
+                  {donutRows.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
+                </Pie>
+                <Tooltip {...lightTooltip} formatter={(v) => Number(v).toLocaleString()} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="wh-util-legend">
+              {donutRows.map((r) => (
+                <div className="recall-row" key={r.name}>
+                  <span><i style={{ background: r.color }} />{r.name}</span>
+                  <strong>{r.value.toLocaleString()}</strong>
+                </div>
+              ))}
+              <div className="wh-util-big">{data.totalUtilization}%<span>Overall Utilization</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="grid g2">
+        <div className="lp-panel wh-util-panel">
+          <h3>Utilization by Floor</h3>
+          <ResponsiveContainer width="100%" height={230}>
+            <BarChart data={data.byFloor} layout="vertical" margin={{ top: 6, right: 18, left: 78, bottom: 4 }}>
+              <CartesianGrid stroke="#E8EEF7" strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="floorId" width={72} tick={{ fontSize: 11 }} />
+              <Tooltip {...lightTooltip} formatter={(v, n) => n === "utilization" ? [`${v}%`, "Utilization"] : [Number(v).toLocaleString(), n]} />
+              <Bar dataKey="utilization" fill="#17A9C0" radius={[0, 8, 8, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="lp-panel wh-util-panel">
+          <h3>Top Zone Pressure</h3>
+          <div className="wh-zone-list">
+            {data.byZone.slice(0, 6).map((z) => (
+              <div className="wh-zone-row" key={z.name}>
+                <div><b>{z.name}</b><span>{z.locations} locations | {z.used.toLocaleString()} / {z.capacity.toLocaleString()}</span></div>
+                {utilizationBar(z.utilization)}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Plant</th><th>Floor</th><th>Zone</th><th>Location</th><th>System</th><th>Type</th><th>Used</th><th>Free</th><th>Capacity</th><th>Items</th><th>Lots</th><th>Utilization</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {locationRows.map((r) => (
+              <tr key={r.code}>
+                <td>{r.plantLabel}</td>
+                <td>{r.floorLabel}</td>
+                <td>{r.zone}</td>
+                <td className="mono">{r.code}</td>
+                <td><span className="sys-badge">{r.system}</span></td>
+                <td>{r.type}</td>
+                <td>{r.used.toLocaleString()}</td>
+                <td>{r.free.toLocaleString()}</td>
+                <td>{r.capacity.toLocaleString()}</td>
+                <td>{r.itemCount}</td>
+                <td>{r.lotCount}</td>
+                <td>{utilizationBar(r.utilization, r.utilization >= 80 ? "danger" : r.utilization >= 60 ? "warn" : "")}</td>
+                <td><StatusBadge code={r.status || "AVL"} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function Warehouse3D({ stock = [] }) {
   const mountRef = useRef(null);
   useEffect(() => {
@@ -5666,6 +5852,7 @@ function Warehouse3D({ stock = [] }) {
         <div className="wh3d-canvas" ref={mountRef} />
         <div className="wh3d-legend"><span><i className="blue" />Available</span><span><i className="amber" />Hold / QC</span><span><i className="red" />Damage</span></div>
       </div>
+      <WarehouseUtilizationDashboard stock={stock} />
       <div className="grid g3" style={{ marginTop: 14 }}>{stock.slice(0, 18).map((r) => <div className="card" key={r.key || `${r.loc}-${r.itemId}`}><h3>{r.loc}</h3><div className="kpi-val">{Number(r.qty || 0).toLocaleString()}</div><div className="kpi-sub">{r.itemId} · {itemOf(r.itemId)?.name || "-"}</div><StatusBadge code={r.status || "AVL"} /></div>)}</div>
     </>
   );
@@ -7003,6 +7190,21 @@ function GlobalStyle() {
       .wh3d-legend span{display:inline-flex;align-items:center;gap:5px;}
       .wh3d-legend i{width:10px;height:10px;border-radius:50%;display:inline-block;}
       .wh3d-legend .blue{background:#3E7EE0;} .wh3d-legend .amber{background:#F5A83C;} .wh3d-legend .red{background:#F15B71;}
+      .wh-util-dashboard{display:grid;gap:14px;margin-top:16px;}
+      .section-title.small{font-size:15px;margin:0;}
+      .wh-util-panel{min-height:285px;}
+      .wh-util-donut-row{display:flex;align-items:center;gap:16px;min-height:235px;}
+      .wh-util-legend{flex:1;display:flex;flex-direction:column;gap:8px;min-width:210px;}
+      .wh-util-legend .recall-row span{display:inline-flex;align-items:center;gap:8px;}
+      .wh-util-legend i{display:inline-block;width:10px;height:10px;border-radius:50%;}
+      .wh-util-big{margin-top:8px;border:1px solid #DCE7F5;border-radius:12px;background:#F7FAFE;padding:12px 14px;font-family:'Space Grotesk';font-size:30px;font-weight:900;color:var(--navy);}
+      .wh-util-big span{display:block;margin-top:2px;font-family:'Sarabun','Noto Sans Thai','Leelawadee UI',Tahoma,Arial,sans-serif;font-size:12px;font-weight:800;color:var(--muted);}
+      .wh-zone-list{display:grid;gap:10px;}
+      .wh-zone-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(155px,210px);gap:12px;align-items:center;border:1px solid var(--border);border-radius:12px;background:#FFFFFF;padding:10px 12px;}
+      .wh-zone-row b{display:block;font-size:12.5px;color:var(--navy);}
+      .wh-zone-row span{display:block;margin-top:2px;font-size:11px;color:var(--muted);}
+      .util-track.warn i{background:var(--amber);}
+      .util-track.danger i{background:var(--danger);}
       .scan-steps-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
       .scan-input-row{display:grid;grid-template-columns:1fr auto;gap:6px;margin-top:6px;}
       .scan-input-row .btn{padding-left:10px;padding-right:10px;}
