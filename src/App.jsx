@@ -5963,12 +5963,60 @@ function Warehouse3D({ stock = [] }) {
       if (renderer.domElement?.parentNode === mount) mount.removeChild(renderer.domElement);
     };
   }, [stock]);
+  const floorUtil = (floorId) => {
+    const rows = utilData.rowsByLocation.filter((r) => r.floor === floorId);
+    const capacity = rows.reduce((sum, r) => sum + Number(r.capacity || 0), 0);
+    const used = rows.reduce((sum, r) => sum + Number(r.used || 0), 0);
+    return capacity ? Math.round((used / capacity) * 100) : 0;
+  };
+  const zoneUtil = (zone) => {
+    const rows = utilData.rowsByLocation.filter((r) => r.zone === zone);
+    const capacity = rows.reduce((sum, r) => sum + Number(r.capacity || 0), 0);
+    const used = rows.reduce((sum, r) => sum + Number(r.used || 0), 0);
+    return capacity ? Math.round((used / capacity) * 100) : 0;
+  };
+  const heatColorFor = (value) => value >= 85 ? "#FF3D62" : value >= 65 ? "#FF8A1F" : value >= 40 ? "#FFBF2F" : "#20C766";
+  const heatZones = [
+    { id: "zone-4f-rack", label: "4F Rack", util: Math.max(8, Math.round((floorUtil("BKK1-2") + zoneUtil("D")) / 2)) },
+    { id: "zone-3f-manual", label: "3F Manual", util: Math.max(8, Math.round((zoneUtil("A") + zoneUtil("C")) / 2)) },
+    { id: "zone-2f-miniload", label: "2F Mini-load", util: Math.max(8, Math.round((zoneUtil("B") + floorUtil("BKK1-MZ")) / 2)) },
+    { id: "zone-1f-outbound", label: "Outbound", util: Math.max(12, Math.min(100, Math.round(utilData.totalUtilization * 1.25))) },
+    { id: "zone-1f-inbound", label: "Inbound", util: Math.max(10, Math.round((utilData.openLocations / Math.max(1, utilData.rowsByLocation.length)) * 100)) },
+    { id: "asrs-1", label: "ASRS 1F", util: Math.max(6, floorUtil("BKK1-MZ")) },
+    { id: "asrs-2", label: "ASRS 2F", util: Math.max(6, floorUtil("BKK1-MZ")) },
+    { id: "asrs-3", label: "ASRS 3F", util: Math.max(6, floorUtil("BKK1-MZ")) },
+    { id: "dock", label: "Dock", util: Math.max(10, Math.round(utilData.totalUtilization * 0.75)) },
+  ].map((z) => ({ ...z, color: heatColorFor(z.util) }));
+  const heatPins = [
+    { loc: "A-03-12-B", x: 36, y: 34 },
+    { loc: "B-01-04-A", x: 33, y: 54 },
+    { loc: "MZ-01-01-A", x: 61, y: 49 },
+    { loc: "D-02-02-B", x: 33, y: 75 },
+  ].map((p) => {
+    const row = utilData.rowsByLocation.find((r) => r.code === p.loc);
+    return { ...p, util: row?.utilization || 0, color: heatColorFor(row?.utilization || 0) };
+  });
   return (
     <>
       <div className="section-title">3D Warehouse Space</div>
-      <div className="wh3d-shell">
-        <img className="wh3d-hero-image" src="warehouse-3d-space-hero.png" alt="3D warehouse space model" />
-        <div className="wh3d-legend"><span><i className="blue" />Available</span><span><i className="amber" />Hold / QC</span><span><i className="red" />Damage</span></div>
+      <div className="wh4floor-shell">
+        <img className="wh4floor-image" src="warehouse-4floor-layout.png" alt="4 floor warehouse 3D overview" />
+        <div className="wh4floor-heat-layer">
+          {heatZones.map((z) => (
+            <div key={z.id} className={`wh-heat-zone ${z.id}`} style={{ "--heat": z.color }} title={`${z.label}: ${z.util}% utilization`}>
+              <span>{z.label}</span><b>{z.util}%</b>
+            </div>
+          ))}
+          {heatPins.map((p) => (
+            <div key={p.loc} className="wh-heat-pin" style={{ left: `${p.x}%`, top: `${p.y}%`, "--heat": p.color }} title={`${p.loc}: ${p.util}% utilization`}>
+              <span>{p.loc}</span><b>{p.util}%</b>
+            </div>
+          ))}
+        </div>
+        <div className="wh4floor-live-badge"><span /> Real-time Heat Map · {utilData.totalUtilization}% Overall</div>
+        <div className="wh4floor-legend">
+          <span><i className="low" />Low</span><span><i className="mid" />Medium</span><span><i className="high" />High</span><span><i className="critical" />Critical</span>
+        </div>
       </div>
       <WarehouseUtilizationDashboard stock={stock} />
       <div className="grid g3" style={{ marginTop: 14 }}>{stock.slice(0, 18).map((r) => <div className="card" key={r.key || `${r.loc}-${r.itemId}`}><h3>{r.loc}</h3><div className="kpi-val">{Number(r.qty || 0).toLocaleString()}</div><div className="kpi-sub">{r.itemId} · {itemOf(r.itemId)?.name || "-"}</div><StatusBadge code={r.status || "AVL"} /></div>)}</div>
@@ -7322,6 +7370,32 @@ function GlobalStyle() {
       .wh3d-legend .blue{background:#3E7EE0;} .wh3d-legend .amber{background:#F5A83C;} .wh3d-legend .red{background:#F15B71;}
       @media (max-width:1180px){.wh3d-metric-overlay{grid-template-columns:repeat(2,1fr);}.wh3d-hero-copy{width:min(390px,58%);}.wh3d-hero-copy h2{font-size:28px;}}
       @media (max-width:760px){.wh3d-canvas,.wh3d-canvas canvas{height:620px!important;}.wh3d-hero-copy{left:18px;right:18px;top:46px;width:auto;}.wh3d-metric-overlay{left:14px;right:14px;grid-template-columns:1fr;}.wh3d-metric-card{min-height:76px;padding:13px 15px;}.wh3d-metric-card b{font-size:26px;}}
+      .wh4floor-shell{position:relative;background:#F8FBFF;border:1px solid #D3DEEC;border-radius:18px;overflow:hidden;box-shadow:0 18px 45px rgba(22,35,61,.12);}
+      .wh4floor-image{display:block;width:100%;height:auto;aspect-ratio:3/2;object-fit:contain;object-position:center;background:#FFFFFF;}
+      .wh4floor-heat-layer{position:absolute;inset:0;pointer-events:none;}
+      .wh-heat-zone{position:absolute;border:2px solid color-mix(in srgb,var(--heat) 78%,#FFFFFF);background:color-mix(in srgb,var(--heat) 34%,transparent);box-shadow:0 0 22px color-mix(in srgb,var(--heat) 35%,transparent),inset 0 0 18px color-mix(in srgb,var(--heat) 22%,transparent);border-radius:10px;display:flex;align-items:center;justify-content:center;gap:7px;color:#FFFFFF;text-shadow:0 2px 8px rgba(0,0,0,.45);font-weight:900;backdrop-filter:saturate(1.2);}
+      .wh-heat-zone span{font-size:11px;text-transform:uppercase;letter-spacing:.02em;}
+      .wh-heat-zone b{font-family:'Space Grotesk';font-size:20px;}
+      .wh-heat-zone.zone-4f-rack{left:18.2%;top:7.7%;width:36%;height:10.4%;transform:skewX(-8deg) rotate(.4deg);}
+      .wh-heat-zone.zone-3f-manual{left:17.4%;top:27.1%;width:37.4%;height:11.2%;transform:skewX(-8deg) rotate(.25deg);}
+      .wh-heat-zone.zone-2f-miniload{left:14.5%;top:48.5%;width:39.5%;height:11.8%;transform:skewX(-8deg) rotate(.2deg);}
+      .wh-heat-zone.zone-1f-outbound{left:15.4%;top:72.3%;width:17.7%;height:10.2%;transform:skewX(-8deg) rotate(.15deg);}
+      .wh-heat-zone.zone-1f-inbound{left:32.1%;top:72.5%;width:18.4%;height:10.1%;transform:skewX(-8deg) rotate(.15deg);}
+      .wh-heat-zone.asrs-1{left:51.2%;top:68.5%;width:21.1%;height:10.4%;transform:skewX(-8deg);}
+      .wh-heat-zone.asrs-2{left:51.7%;top:48.5%;width:20.7%;height:10.7%;transform:skewX(-8deg);}
+      .wh-heat-zone.asrs-3{left:52.2%;top:28.8%;width:20.6%;height:10.6%;transform:skewX(-8deg);}
+      .wh-heat-zone.dock{left:73.7%;top:77.6%;width:13.8%;height:7.5%;transform:skewX(-9deg);}
+      .wh-heat-pin{position:absolute;transform:translate(-50%,-50%);min-width:96px;padding:6px 9px;border:1px solid color-mix(in srgb,var(--heat) 72%,#FFFFFF);border-radius:10px;background:rgba(8,24,45,.86);color:#FFFFFF;box-shadow:0 10px 24px rgba(4,16,34,.22);display:grid;gap:1px;text-align:center;pointer-events:none;}
+      .wh-heat-pin:after{content:"";position:absolute;left:50%;top:100%;width:2px;height:26px;background:var(--heat);box-shadow:0 0 12px var(--heat);}
+      .wh-heat-pin span{font-family:'JetBrains Mono';font-size:10px;color:#DCEBFF;}
+      .wh-heat-pin b{font-family:'Space Grotesk';font-size:18px;color:var(--heat);line-height:1;}
+      .wh4floor-live-badge{position:absolute;left:20px;top:16px;display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.92);border:1px solid #CFE0FF;border-radius:999px;padding:8px 12px;color:#0B2F56;font-weight:900;font-size:12px;box-shadow:0 8px 20px rgba(22,35,61,.10);}
+      .wh4floor-live-badge span{width:9px;height:9px;border-radius:50%;background:#20C766;box-shadow:0 0 0 6px rgba(32,199,102,.14);}
+      .wh4floor-legend{position:absolute;right:18px;top:16px;display:flex;gap:12px;flex-wrap:wrap;background:rgba(255,255,255,.94);border:1px solid #D3DEEC;border-radius:999px;padding:8px 12px;color:#0B2F56;font-weight:900;font-size:12px;box-shadow:0 8px 20px rgba(22,35,61,.10);}
+      .wh4floor-legend span{display:inline-flex;align-items:center;gap:6px;}
+      .wh4floor-legend i{width:11px;height:11px;border-radius:50%;display:inline-block;}
+      .wh4floor-legend .low{background:#20C766;}.wh4floor-legend .mid{background:#FFBF2F;}.wh4floor-legend .high{background:#FF8A1F;}.wh4floor-legend .critical{background:#FF3D62;}
+      @media (max-width:900px){.wh4floor-shell{overflow-x:auto;}.wh4floor-image{min-width:980px;}.wh4floor-heat-layer,.wh4floor-live-badge,.wh4floor-legend{min-width:980px;}.wh-heat-zone span{font-size:10px;}.wh-heat-zone b{font-size:16px;}}
       .wh-util-dashboard{display:grid;gap:14px;margin-top:16px;}
       .section-title.small{font-size:15px;margin:0;}
       .wh-util-panel{min-height:285px;}
