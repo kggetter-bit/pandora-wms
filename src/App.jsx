@@ -5967,18 +5967,7 @@ function Warehouse3D({ stock = [] }) {
     <>
       <div className="section-title">3D Warehouse Space</div>
       <div className="wh3d-shell">
-        <div className="wh3d-canvas" ref={mountRef} />
-        <div className="wh3d-hero-copy">
-          <span>Smart Warehouse Digital Twin</span>
-          <h2>ยกระดับสู่ระบบนิเวศคลังสินค้าอัจฉริยะ</h2>
-          <p>มุมมอง 3D แบบหลายชั้น แสดงพื้นที่จัดเก็บ, ASRS / Miniload, Dock, Location และภาพรวม Utilization สำหรับวางแผนพื้นที่คลัง</p>
-        </div>
-        <div className="wh3d-metric-overlay">
-          <div className="wh3d-metric-card cyan"><Boxes size={34} /><div><span>Total Pallet Capacity</span><b>{palletCapacity.toLocaleString()}</b><em>Pallets</em></div></div>
-          <div className="wh3d-metric-card green"><Package size={34} /><div><span>Total Tote Storage</span><b>{toteStorage.toLocaleString()}</b><em>Locations</em></div></div>
-          <div className="wh3d-metric-card white"><Warehouse size={34} /><div><span>Total Warehouse Area</span><b>7,949</b><em>Sq.M</em></div></div>
-          <div className="wh3d-metric-card amber"><Gauge size={34} /><div><span>Utilization</span><b>{utilData.totalUtilization}%</b><em>Used Space</em></div></div>
-        </div>
+        <img className="wh3d-hero-image" src="warehouse-3d-space-hero.png" alt="3D warehouse space model" />
         <div className="wh3d-legend"><span><i className="blue" />Available</span><span><i className="amber" />Hold / QC</span><span><i className="red" />Damage</span></div>
       </div>
       <WarehouseUtilizationDashboard stock={stock} />
@@ -7312,11 +7301,10 @@ function GlobalStyle() {
       .age-chip.warn{background:rgba(245,168,60,.18);color:var(--orange);}
       .age-chip.orange{background:rgba(245,126,60,.2);color:#D76B1B;}
       .age-chip.risk{background:rgba(241,91,113,.18);color:var(--danger);}
-      .wh3d-shell{position:relative;background:radial-gradient(circle at 68% 45%,rgba(255,180,88,.24),transparent 18%),linear-gradient(135deg,#06142A 0%,#071A36 46%,#031026 100%);border:1px solid rgba(119,223,255,.28);border-radius:18px;overflow:hidden;box-shadow:0 22px 50px rgba(6,20,42,.28);}
-      .wh3d-shell:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,16,38,.78) 0%,rgba(3,16,38,.38) 34%,rgba(3,16,38,.04) 70%);pointer-events:none;z-index:1;}
-      .wh3d-shell:after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(119,223,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(119,223,255,.05) 1px,transparent 1px);background-size:42px 42px;opacity:.32;pointer-events:none;z-index:1;}
+      .wh3d-shell{position:relative;background:#06142A;border:1px solid rgba(119,223,255,.28);border-radius:18px;overflow:hidden;box-shadow:0 22px 50px rgba(6,20,42,.28);}
       .wh3d-canvas{height:520px;width:100%;}
       .wh3d-canvas canvas{display:block;width:100%!important;height:520px!important;}
+      .wh3d-hero-image{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;object-position:center;}
       .wh3d-hero-copy{position:absolute;left:36px;top:54px;width:min(430px,42%);z-index:2;color:#FFFFFF;text-shadow:0 10px 24px rgba(0,0,0,.35);}
       .wh3d-hero-copy span{display:inline-block;margin-bottom:10px;padding:6px 10px;border:1px solid rgba(119,223,255,.35);border-radius:999px;background:rgba(8,30,61,.62);color:#8DEBFF;font-family:'Space Grotesk';font-size:11px;font-weight:900;letter-spacing:.02em;text-transform:uppercase;}
       .wh3d-hero-copy h2{margin:0;font-size:34px;line-height:1.18;font-weight:900;letter-spacing:0;color:#FFFFFF;}
