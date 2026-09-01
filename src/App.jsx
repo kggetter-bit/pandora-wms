@@ -1938,6 +1938,22 @@ function PlatformOrders({ platformOrders }) {
   const weekdayOrder = [1, 2, 3, 4, 5, 6, 0];
   const weekdayData = weekdayOrder.map((wd) => ({ day: WEEKDAY_TH[wd], full: WEEKDAY_TH[wd], avg: wdAgg[wd].n ? +(wdAgg[wd].total / wdAgg[wd].n).toFixed(1) : 0 }));
   const peakDay = weekdayData.reduce((a, b) => (b.avg > a.avg ? b : a), weekdayData[0]);
+  const vehicleProfiles = [
+    { type: "4W", label: "รถ 4W", color: "#2F67FF", threshold: 0.16, baseMin: 28 },
+    { type: "6W", label: "รถ 6W", color: "#17A9C0", threshold: 0.28, baseMin: 42 },
+    { type: "10W", label: "รถ 10W", color: "#F5A83C", threshold: 0.42, baseMin: 58 },
+    { type: "22W", label: "รถ 22W", color: "#F15B71", threshold: Infinity, baseMin: 76 },
+  ];
+  const vehicleOf = (order) => vehicleProfiles.find((v) => Number(order.cube || 0) <= v.threshold) || vehicleProfiles.at(-1);
+  const vehicleRows = vehicleProfiles.map((v) => {
+    const rows = filtered.filter((o) => vehicleOf(o).type === v.type);
+    const serviceMinutes = rows.length
+      ? Math.round(rows.reduce((sum, o) => sum + v.baseMin + Number(o.items || 0) * 3 + Number(o.cube || 0) * 18, 0) / rows.length)
+      : 0;
+    const cube = rows.reduce((sum, o) => sum + Number(o.cube || 0), 0);
+    return { ...v, count: rows.length, serviceMinutes, cube: +cube.toFixed(2), share: pct(rows.length, filtered.length) };
+  });
+  const vehicleDonutRows = vehicleRows.filter((r) => r.count > 0).map((r) => ({ name: r.label, value: r.count, color: r.color }));
 
   return (
     <>
@@ -1945,6 +1961,48 @@ function PlatformOrders({ platformOrders }) {
         {Object.entries(statusCount).map(([s, c]) => (
           <div className="card" key={s}><h3>{s}</h3><div className="kpi-val" style={{ fontSize: 22 }}>{c}</div></div>
         ))}
+      </div>
+
+      <div className="section-title">สรุปรูปแบบรถขนส่ง 4W / 6W / 10W / 22W</div>
+      <div className="vehicle-dashboard">
+        <div className="vehicle-card-grid">
+          {vehicleRows.map((v) => (
+            <div className="vehicle-card" key={v.type} style={{ "--vehicle": v.color }}>
+              <div className="vehicle-icon"><Truck size={24} /></div>
+              <div className="vehicle-body">
+                <span>{v.label}</span>
+                <b>{v.count.toLocaleString()}</b>
+                <em>งานขนส่ง · {v.share}</em>
+              </div>
+              <div className="vehicle-service">
+                <span>เวลาเฉลี่ยให้บริการ</span>
+                <b>{v.serviceMinutes || "-"} นาที</b>
+                <em>{v.cube.toLocaleString()} CBM</em>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="vehicle-donut-card">
+          <h3>สัดส่วนประเภทรถขนส่ง</h3>
+          <div className="vehicle-donut-wrap">
+            <ResponsiveContainer width="46%" height={210}>
+              <PieChart>
+                <Pie data={vehicleDonutRows} dataKey="value" innerRadius={52} outerRadius={78} paddingAngle={3}>
+                  {vehicleDonutRows.map((r) => <Cell key={r.name} fill={r.color} />)}
+                </Pie>
+                <Tooltip {...lightTooltip} formatter={(v) => [`${Number(v).toLocaleString()} งาน`, "จำนวน"]} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="vehicle-legend">
+              {vehicleRows.map((v) => (
+                <div className="cat-line" key={v.type}>
+                  <span><i style={{ background: v.color }} />{v.label}</span>
+                  <b>{v.count.toLocaleString()} · {v.share}</b>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="section-title">Trend Order รายวัน (14 วันล่าสุด)</div>
@@ -7528,6 +7586,23 @@ function GlobalStyle() {
       .trend-bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;}
       .trend-bar .bar{width:100%;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--amber),var(--teal));min-height:4px;}
       .trend-bar .lbl{font-size:10px;color:var(--muted);}
+      .vehicle-dashboard{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(340px,.8fr);gap:14px;margin-bottom:24px;}
+      .vehicle-card-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+      .vehicle-card{--vehicle:#2F67FF;background:#FFFFFF;border:1px solid color-mix(in srgb,var(--vehicle) 26%,#DCE7F5);border-left:4px solid var(--vehicle);border-radius:14px;padding:15px 16px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;box-shadow:0 10px 24px rgba(22,35,61,.06);}
+      .vehicle-icon{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;background:color-mix(in srgb,var(--vehicle) 15%,#FFFFFF);color:var(--vehicle);}
+      .vehicle-body span,.vehicle-service span{display:block;color:var(--muted);font-size:11px;font-weight:900;margin-bottom:3px;}
+      .vehicle-body b{display:block;font-family:'Space Grotesk';font-size:29px;color:var(--navy);line-height:1;}
+      .vehicle-body em,.vehicle-service em{display:block;font-style:normal;color:var(--muted);font-size:11px;font-weight:700;margin-top:4px;}
+      .vehicle-service{text-align:right;min-width:126px;}
+      .vehicle-service b{display:block;font-family:'Space Grotesk';font-size:18px;color:var(--vehicle);line-height:1.1;}
+      .vehicle-donut-card{background:#FFFFFF;border:1px solid var(--border);border-radius:14px;padding:15px 16px;box-shadow:0 10px 24px rgba(22,35,61,.06);}
+      .vehicle-donut-card h3{margin:0 0 6px;font-size:13px;color:var(--navy);}
+      .vehicle-donut-wrap{display:flex;align-items:center;gap:12px;}
+      .vehicle-legend{flex:1;display:flex;flex-direction:column;gap:8px;}
+      .vehicle-legend .cat-line span{display:inline-flex;align-items:center;gap:8px;}
+      .vehicle-legend .cat-line i{width:10px;height:10px;border-radius:50%;display:inline-block;}
+      @media (max-width:1180px){.vehicle-dashboard{grid-template-columns:1fr;}.vehicle-card-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+      @media (max-width:720px){.vehicle-card-grid{grid-template-columns:1fr;}.vehicle-card{grid-template-columns:auto 1fr;}.vehicle-service{grid-column:1/-1;text-align:left;}.vehicle-donut-wrap{flex-direction:column;align-items:stretch;}}
 
       /* ---------- Executive dashboard ---------- */
       .exec-dashboard{background:linear-gradient(135deg,#F8FAFF 0%,#EEF3FA 100%);margin:-24px;padding:24px;min-height:100%;color:#17213A;}
