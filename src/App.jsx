@@ -5778,55 +5778,115 @@ function WarehouseUtilizationDashboard({ stock = [] }) {
 
 function Warehouse3D({ stock = [] }) {
   const mountRef = useRef(null);
+  const utilData = warehouseUtilizationOf(stock);
+  const palletCapacity = LOCATIONS.filter((l) => l.type !== "Bin").reduce((sum, l) => sum + Number(l.capacity || 0), 0);
+  const toteStorage = LOCATIONS.filter((l) => l.system === "ASRS" || l.system === "Miniload").reduce((sum, l) => sum + Number(l.capacity || 0), 0);
   useEffect(() => {
     if (!mountRef.current) return undefined;
     const mount = mountRef.current;
     const width = mount.clientWidth || 900;
-    const height = 420;
+    const height = 520;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf3f7fb);
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(16, 13, 18);
-    camera.lookAt(0, 0, 0);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    scene.background = new THREE.Color(0x06142a);
+    scene.fog = new THREE.Fog(0x06142a, 18, 42);
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+    camera.position.set(18, 13, 20);
+    camera.lookAt(0, 4, 0);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     mount.innerHTML = "";
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa7b8, 1.25));
-    const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-    dir.position.set(8, 12, 8);
+    scene.add(new THREE.HemisphereLight(0xaeeeff, 0x06142a, 0.72));
+    const cyanLight = new THREE.PointLight(0x71d9ff, 2.2, 34);
+    cyanLight.position.set(-7, 9, 6);
+    scene.add(cyanLight);
+    const coreLight = new THREE.PointLight(0xffbe62, 3.4, 26);
+    coreLight.position.set(0, 6, 0);
+    scene.add(coreLight);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.55);
+    dir.position.set(8, 14, 8);
     scene.add(dir);
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(22, 0.16, 14), new THREE.MeshStandardMaterial({ color: 0xe7eef8, roughness: 0.85 }));
-    floor.position.y = -0.12;
-    scene.add(floor);
-    const grid = new THREE.GridHelper(22, 22, 0xb9c6d8, 0xd6dee8);
-    grid.position.y = 0.02;
-    scene.add(grid);
+
+    const root = new THREE.Group();
+    scene.add(root);
+    const lineCyan = new THREE.LineBasicMaterial({ color: 0x77dfff, transparent: true, opacity: 0.48 });
+    const faintCyan = new THREE.LineBasicMaterial({ color: 0x77dfff, transparent: true, opacity: 0.2 });
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x17304f, transparent: true, opacity: 0.56, roughness: 0.55, metalness: 0.18 });
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0xffb458, emissive: 0xff8e20, emissiveIntensity: 0.82, transparent: true, opacity: 0.78, roughness: 0.42 });
+    const createWireBox = (w, h, d, x, y, z, mat = lineCyan) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: 0x214c72, transparent: true, opacity: 0.08, roughness: 0.7 }));
+      mesh.position.set(x, y, z);
+      root.add(mesh);
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), mat);
+      edge.position.copy(mesh.position);
+      root.add(edge);
+      return mesh;
+    };
+
+    createWireBox(22, 10.8, 14, 0, 5.2, 0, faintCyan);
+    [0, 2.7, 5.4, 8.1].forEach((y, level) => {
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(20.5, 0.18, 12.8), floorMat);
+      plate.position.set(0, y, 0);
+      root.add(plate);
+      const plateEdge = new THREE.LineSegments(new THREE.EdgesGeometry(plate.geometry), lineCyan);
+      plateEdge.position.copy(plate.position);
+      root.add(plateEdge);
+      const rackCount = level === 0 ? 9 : 7;
+      for (let i = 0; i < rackCount; i += 1) {
+        const side = i % 2 === 0 ? -1 : 1;
+        const x = side * (3.7 + (i % 3) * 1.75);
+        const z = -4.3 + Math.floor(i / 2) * 2.1;
+        const h = 1.45 + (i % 3) * 0.2;
+        createWireBox(1.25, h, 1.45, x, y + 0.85, z, lineCyan);
+      }
+    });
+
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(2.7, 9.8, 2.5), towerMat);
+    tower.position.set(0, 4.9, 0);
+    root.add(tower);
+    const towerEdge = new THREE.LineSegments(new THREE.EdgesGeometry(tower.geometry), new THREE.LineBasicMaterial({ color: 0xffd18a, transparent: true, opacity: 0.9 }));
+    towerEdge.position.copy(tower.position);
+    root.add(towerEdge);
+    for (let y = 0.8; y < 9.5; y += 0.75) {
+      const liftLine = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(3.05, 0.035, 2.86)), new THREE.LineBasicMaterial({ color: 0xffd18a, transparent: true, opacity: 0.36 }));
+      liftLine.position.set(0, y, 0);
+      root.add(liftLine);
+    }
 
     const byLoc = Object.values(stock.reduce((m, r) => {
       const loc = r.loc || "UNKNOWN";
-      m[loc] = m[loc] || { loc, qty: 0, status: r.status, floor: locOf(loc)?.floor };
+      m[loc] = m[loc] || { loc, qty: 0, status: r.status };
       m[loc].qty += Number(r.qty || 0);
       if (r.status !== "AVL") m[loc].status = r.status;
       return m;
-    }, {})).slice(0, 28);
+    }, {})).slice(0, 34);
     byLoc.forEach((r, i) => {
-      const x = (i % 7) * 2.8 - 8.4;
-      const z = Math.floor(i / 7) * 2.6 - 4.2;
-      const h = Math.max(0.5, Math.min(4.2, r.qty / 420));
-      const color = r.status === "HOLD" || r.status === "QC" ? 0xf5a83c : r.status === "DMG" ? 0xf15b71 : 0x3e7ee0;
-      const box = new THREE.Mesh(new THREE.BoxGeometry(1.7, h, 1.5), new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.04 }));
-      box.position.set(x, h / 2, z);
-      scene.add(box);
-      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(box.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }));
-      edge.position.copy(box.position);
-      scene.add(edge);
+      const level = i % 4;
+      const x = ((i % 6) - 2.5) * 1.55 + (i % 2 ? 4.2 : -4.2);
+      const z = -4.8 + (Math.floor(i / 6) % 4) * 2.1;
+      const y = level * 2.7 + 0.35;
+      const color = r.status === "HOLD" || r.status === "QC" ? 0xffbe52 : r.status === "DMG" ? 0xff5f78 : 0x78e6ff;
+      const pallet = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.72), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.26, transparent: true, opacity: 0.82 }));
+      pallet.position.set(x, y, z);
+      root.add(pallet);
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(pallet.geometry), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 }));
+      edge.position.copy(pallet.position);
+      root.add(edge);
     });
+
+    [-7.8, -3.1, 2.8, 7.5].forEach((x, i) => {
+      createWireBox(2.1, 0.65, 1.2, x, 0.35, 7.1, new THREE.LineBasicMaterial({ color: i % 2 ? 0x8fffd0 : 0x77dfff, transparent: true, opacity: 0.52 }));
+      createWireBox(1.25, 0.7, 0.9, x - 0.9, 0.35, 8.0, faintCyan);
+    });
+
+    const grid = new THREE.GridHelper(24, 24, 0x4f91b8, 0x163252);
+    grid.position.y = -0.02;
+    root.add(grid);
     let raf = 0;
     const tick = () => {
-      scene.rotation.y += 0.0025;
+      root.rotation.y = Math.sin(Date.now() * 0.00035) * 0.09;
       renderer.render(scene, camera);
       raf = requestAnimationFrame(tick);
     };
@@ -5850,6 +5910,17 @@ function Warehouse3D({ stock = [] }) {
       <div className="section-title">3D Warehouse Space</div>
       <div className="wh3d-shell">
         <div className="wh3d-canvas" ref={mountRef} />
+        <div className="wh3d-hero-copy">
+          <span>Smart Warehouse Digital Twin</span>
+          <h2>ยกระดับสู่ระบบนิเวศคลังสินค้าอัจฉริยะ</h2>
+          <p>มุมมอง 3D แบบหลายชั้น แสดงพื้นที่จัดเก็บ, ASRS / Miniload, Dock, Location และภาพรวม Utilization สำหรับวางแผนพื้นที่คลัง</p>
+        </div>
+        <div className="wh3d-metric-overlay">
+          <div className="wh3d-metric-card cyan"><Boxes size={34} /><div><span>Total Pallet Capacity</span><b>{palletCapacity.toLocaleString()}</b><em>Pallets</em></div></div>
+          <div className="wh3d-metric-card green"><Package size={34} /><div><span>Total Tote Storage</span><b>{toteStorage.toLocaleString()}</b><em>Locations</em></div></div>
+          <div className="wh3d-metric-card white"><Warehouse size={34} /><div><span>Total Warehouse Area</span><b>7,949</b><em>Sq.M</em></div></div>
+          <div className="wh3d-metric-card amber"><Gauge size={34} /><div><span>Utilization</span><b>{utilData.totalUtilization}%</b><em>Used Space</em></div></div>
+        </div>
         <div className="wh3d-legend"><span><i className="blue" />Available</span><span><i className="amber" />Hold / QC</span><span><i className="red" />Damage</span></div>
       </div>
       <WarehouseUtilizationDashboard stock={stock} />
@@ -7183,13 +7254,28 @@ function GlobalStyle() {
       .age-chip.warn{background:rgba(245,168,60,.18);color:var(--orange);}
       .age-chip.orange{background:rgba(245,126,60,.2);color:#D76B1B;}
       .age-chip.risk{background:rgba(241,91,113,.18);color:var(--danger);}
-      .wh3d-shell{position:relative;background:#F7FAFE;border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 12px 34px rgba(22,35,61,.08);}
-      .wh3d-canvas{height:420px;width:100%;}
-      .wh3d-canvas canvas{display:block;width:100%!important;height:420px!important;}
-      .wh3d-legend{position:absolute;right:14px;top:14px;display:flex;gap:8px;flex-wrap:wrap;background:rgba(255,255,255,.88);border:1px solid var(--border);border-radius:999px;padding:7px 10px;font-size:11px;font-weight:800;color:var(--muted);}
+      .wh3d-shell{position:relative;background:radial-gradient(circle at 68% 45%,rgba(255,180,88,.24),transparent 18%),linear-gradient(135deg,#06142A 0%,#071A36 46%,#031026 100%);border:1px solid rgba(119,223,255,.28);border-radius:18px;overflow:hidden;box-shadow:0 22px 50px rgba(6,20,42,.28);}
+      .wh3d-shell:before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(3,16,38,.78) 0%,rgba(3,16,38,.38) 34%,rgba(3,16,38,.04) 70%);pointer-events:none;z-index:1;}
+      .wh3d-shell:after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(119,223,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(119,223,255,.05) 1px,transparent 1px);background-size:42px 42px;opacity:.32;pointer-events:none;z-index:1;}
+      .wh3d-canvas{height:520px;width:100%;}
+      .wh3d-canvas canvas{display:block;width:100%!important;height:520px!important;}
+      .wh3d-hero-copy{position:absolute;left:36px;top:54px;width:min(430px,42%);z-index:2;color:#FFFFFF;text-shadow:0 10px 24px rgba(0,0,0,.35);}
+      .wh3d-hero-copy span{display:inline-block;margin-bottom:10px;padding:6px 10px;border:1px solid rgba(119,223,255,.35);border-radius:999px;background:rgba(8,30,61,.62);color:#8DEBFF;font-family:'Space Grotesk';font-size:11px;font-weight:900;letter-spacing:.02em;text-transform:uppercase;}
+      .wh3d-hero-copy h2{margin:0;font-size:34px;line-height:1.18;font-weight:900;letter-spacing:0;color:#FFFFFF;}
+      .wh3d-hero-copy p{margin:14px 0 0;color:#D7E9FF;font-size:14px;line-height:1.65;font-weight:700;}
+      .wh3d-metric-overlay{position:absolute;left:24px;right:24px;bottom:22px;z-index:2;display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:14px;}
+      .wh3d-metric-card{min-height:96px;display:flex;align-items:center;gap:14px;padding:18px 20px;border:1px solid rgba(209,233,255,.42);border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.06));box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 12px 32px rgba(0,0,0,.28);backdrop-filter:blur(10px);color:#FFFFFF;}
+      .wh3d-metric-card svg{flex:0 0 auto;filter:drop-shadow(0 0 12px currentColor);}
+      .wh3d-metric-card.cyan svg{color:#77DFFF;}.wh3d-metric-card.green svg{color:#8FFFD0;}.wh3d-metric-card.white svg{color:#FFFFFF;}.wh3d-metric-card.amber svg{color:#FFD18A;}
+      .wh3d-metric-card span{display:block;color:#D7E9FF;font-size:12px;font-weight:900;margin-bottom:4px;}
+      .wh3d-metric-card b{display:inline-block;font-family:'Space Grotesk';font-size:34px;line-height:1;color:#FFFFFF;}
+      .wh3d-metric-card em{font-style:normal;margin-left:8px;color:#D7E9FF;font-size:13px;font-weight:800;}
+      .wh3d-legend{position:absolute;right:14px;top:14px;z-index:2;display:flex;gap:8px;flex-wrap:wrap;background:rgba(8,30,61,.72);border:1px solid rgba(119,223,255,.25);border-radius:999px;padding:7px 10px;font-size:11px;font-weight:800;color:#D7E9FF;backdrop-filter:blur(8px);}
       .wh3d-legend span{display:inline-flex;align-items:center;gap:5px;}
       .wh3d-legend i{width:10px;height:10px;border-radius:50%;display:inline-block;}
       .wh3d-legend .blue{background:#3E7EE0;} .wh3d-legend .amber{background:#F5A83C;} .wh3d-legend .red{background:#F15B71;}
+      @media (max-width:1180px){.wh3d-metric-overlay{grid-template-columns:repeat(2,1fr);}.wh3d-hero-copy{width:min(390px,58%);}.wh3d-hero-copy h2{font-size:28px;}}
+      @media (max-width:760px){.wh3d-canvas,.wh3d-canvas canvas{height:620px!important;}.wh3d-hero-copy{left:18px;right:18px;top:46px;width:auto;}.wh3d-metric-overlay{left:14px;right:14px;grid-template-columns:1fr;}.wh3d-metric-card{min-height:76px;padding:13px 15px;}.wh3d-metric-card b{font-size:26px;}}
       .wh-util-dashboard{display:grid;gap:14px;margin-top:16px;}
       .section-title.small{font-size:15px;margin:0;}
       .wh-util-panel{min-height:285px;}
