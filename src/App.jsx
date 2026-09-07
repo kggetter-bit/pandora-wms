@@ -168,11 +168,16 @@ const SYNNEX_SALES_CODES = [
 const formatSynnexId = (project, sales, item) => `${String(project).padStart(3, "0")}${String(sales).padStart(3, "0")}${String(item).padStart(4, "0")}`;
 const prettySynnexId = (id) => `${String(id).slice(0, 3)}-${String(id).slice(3, 6)}-${String(id).slice(6, 10)}`;
 const parseWmsDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   const raw = String(value || "").trim();
-  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
+  const m = raw.match(/(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (!m) {
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   const year = Number(m[1]) > 2400 ? Number(m[1]) - 543 : Number(m[1]);
-  return new Date(Date.UTC(year, Number(m[2]) - 1, Number(m[3])));
+  return new Date(year, Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
 };
 const daysBetweenWmsDates = (fromDate, toDate) => {
   const from = parseWmsDate(fromDate);
@@ -447,6 +452,7 @@ const NAV_GROUPS = [
       { id: "orders", label: "Order by Platform (B2B/B2C)", icon: ShoppingBag },
       { id: "inboundsummary", label: "Total Inbound Summary", icon: ScanLine },
       { id: "outboundsummary", label: "Total Outbound Summary", icon: Truck },
+      { id: "totalsummary", label: "Total Summary", icon: ClipboardList },
       { id: "externalwh", label: "External Warehouse Dashboard", icon: Warehouse },
       { id: "salestracking", label: "Sales Order Tracking", icon: Route },
       { id: "warehouse3d", label: "3D Warehouse Space", icon: Box },
@@ -646,7 +652,7 @@ const getExportRows = (view, ctx) => {
     { Stage: "Open Orders", Owner: "Outbound", Backlog: (ctx.platformOrders || []).filter((o) => !statusHas(o.status, "สำเร็จ", "สำเร็จ") && !statusHas(o.status, "จัดส่ง", "จัดส่ง")).length, Within_24h: "", Over_24h: "", Max_Age_Hours: "", SLA_Hours: "" },
   ];
   const map = {
-    overview: summaryRows, orders: orderRows, inboundsummary: poRows, outboundsummary: orderRows, appointment: () => ctx.dockSlots || [],
+    overview: summaryRows, orders: orderRows, inboundsummary: poRows, outboundsummary: orderRows, totalsummary: () => totalSummaryRows(ctx), appointment: () => ctx.dockSlots || [],
     receiving: poRows, putaway: stockRows, inventory: txRows, cyclecount: () => ctx.cycleCounts || [], replenishment: () => ctx.replenishRules || [],
     allocation: () => (ctx.allocOrders || []).map((o) => ({ Order: o.id, Customer: o.customer, Priority: o.priority, Status: o.status, Lines: (o.items || o.lines || []).length })),
     picking: summaryRows, pickops: pickRows,
@@ -1166,6 +1172,7 @@ export default function App() {
             {view === "orders" && <PlatformOrders {...ctx} />}
             {view === "inboundsummary" && <TotalInboundSummary dockSlots={dockSlots} poList={poList} />}
             {view === "outboundsummary" && <TotalOutboundSummary platformOrders={platformOrders} />}
+            {view === "totalsummary" && <TotalSummary {...ctx} />}
             {view === "externalwh" && <ExternalWarehouseDashboard stock={stock} platformOrders={platformOrders} poList={poList} />}
             {view === "salestracking" && <SalesOrderTracking {...ctx} />}
             {view === "master" && <MasterData />}
@@ -2089,6 +2096,63 @@ function pct(n, d) {
   return d ? `${((n / d) * 100).toFixed(1)}%` : "0.0%";
 }
 
+const dateInputOf = (value) => {
+  const d = parseWmsDate(value);
+  if (!d) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const isDateInRange = (value, from, to) => {
+  const d = parseWmsDate(value);
+  const a = parseWmsDate(from);
+  const b = parseWmsDate(to);
+  if (!d) return false;
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const start = a ? new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime() : -Infinity;
+  const end = b ? new Date(b.getFullYear(), b.getMonth(), b.getDate(), 23, 59, 59, 999).getTime() : Infinity;
+  return day >= start && day <= end;
+};
+const lpnContainerOf = (row) => {
+  const item = itemOf(row.itemId) || {};
+  const qty = Number(row.qty || 0);
+  const palletCap = Number(item.pack?.piecePerPallet || 0);
+  const basketCap = Number(item.pack?.piecePerBasket || 0);
+  if (palletCap && qty >= Math.max(1, palletCap * 0.8)) return "Pallet";
+  if (basketCap && qty <= basketCap * 2) return "Basket";
+  return row.lpn?.includes("TOTE") ? "Basket" : "Pallet";
+};
+function totalSummaryRows(ctx = {}, range = {}) {
+  const from = range.from || "2026-07-01";
+  const to = range.to || dateInputOf(new Date());
+  const stockRows = (ctx.stock || []).filter((r) => isDateInRange(r.receiveDate || r.t, from, to));
+  const txRows = (ctx.txLog || []).filter((t) => isDateInRange(t.t, from, to));
+  const lpnMap = new Map();
+  const rememberLpn = (row) => {
+    const lpn = row.lpn || `NO-LPN-${row.itemId || row.synnexId || "UNKNOWN"}`;
+    const itemId = row.itemId || row.synnexId || "";
+    const item = itemOf(itemId) || {};
+    const receiveDate = row.receiveDate || row.t || new Date();
+    const receive = parseWmsDate(receiveDate) || new Date();
+    const lastTx = txRows.find((t) => (t.lpn || "") === row.lpn) || {};
+    const lastDate = parseWmsDate(lastTx.t) || new Date();
+    const stayDays = Math.max(0, Math.round((lastDate - receive) / 86400000));
+    const current = lpnMap.get(lpn) || { LPN: lpn, SYNNEX_ID: itemId, Item_Name: item.name || "", Brand: item.brand || "", Lot: lotCodeOf(row) || row.lot || "", Receive_Date: dateInputOf(receive), Last_Activity: dateInputOf(lastDate), Qty: 0, Pallet: 0, Basket: 0, Stay_Days: stayDays, Current_Location: row.loc || row.toLoc || "", Status: row.status || "" };
+    const qty = Number(row.qty || 0);
+    const container = lpnContainerOf(row);
+    const itemPallet = Math.max(1, Number(item.pack?.piecePerPallet || qty || 1));
+    const itemBasket = Math.max(1, Number(item.pack?.piecePerBasket || qty || 1));
+    current.Qty += qty;
+    current.Pallet += container === "Pallet" ? Math.ceil(qty / itemPallet) : 0;
+    current.Basket += container === "Basket" ? Math.ceil(qty / itemBasket) : 0;
+    current.Stay_Days = Math.max(current.Stay_Days, stayDays);
+    current.Current_Location = row.loc || row.toLoc || current.Current_Location;
+    current.Status = row.status || current.Status;
+    lpnMap.set(lpn, current);
+  };
+  stockRows.forEach(rememberLpn);
+  txRows.filter((t) => t.lpn && !lpnMap.has(t.lpn)).forEach((t) => rememberLpn({ ...t, qty: Number(t.qty || 0), receiveDate: t.t, status: t.type }));
+  return [...lpnMap.values()].sort((a, b) => String(a.Receive_Date).localeCompare(String(b.Receive_Date)) || String(a.LPN).localeCompare(String(b.LPN)));
+}
+
 const statusHas = (status, ...tokens) => tokens.some((t) => String(status || "").includes(t));
 const isFullReceiveStatus = (status) => statusHas(status, "รับครบ", "รับครบ");
 const isPackedStatus = (status) => statusHas(status, "แพ็ค", "พ็ค");
@@ -2235,6 +2299,157 @@ function TotalOutboundSummary({ platformOrders }) {
             <tr key={r.date}>
               <td className="mono">{r.date}</td><td>{r.orders}</td><td>{r.items}</td><td className="mono">{r.cube.toFixed(2)}</td>
               <td>{r.packed}</td><td>{r.shipped}</td><td>{r.completed}</td><td>{r.pending}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function TotalSummary({ stock = [], txLog = [], poList = [], platformOrders = [] }) {
+  const [from, setFrom] = useState("2026-07-01");
+  const [to, setTo] = useState(dateInputOf(new Date()));
+  const [typeFilter, setTypeFilter] = useState("ALL");
+  const ctx = { stock, txLog, poList, platformOrders };
+  const lpnRows = totalSummaryRows(ctx, { from, to });
+  const txRows = txLog.filter((t) => isDateInRange(t.t, from, to));
+  const receivedRows = stock.filter((r) => isDateInRange(r.receiveDate || r.t, from, to));
+  const inboundQty = receivedRows.reduce((sum, r) => sum + Number(r.qty || 0), 0);
+  const pickQty = txRows.filter((t) => /pick/i.test(t.type || "")).reduce((sum, t) => sum + Number(t.qty || 0), 0);
+  const packQty = txRows.filter((t) => /pack/i.test(t.type || "") && !/cancel/i.test(t.type || "")).reduce((sum, t) => sum + Number(t.qty || 0), 0);
+  const shipQty = txRows.filter((t) => /ship/i.test(t.type || "")).reduce((sum, t) => sum + Number(t.qty || 0), 0);
+  const outboundQty = Math.max(pickQty, packQty, shipQty);
+  const filteredLpnRows = typeFilter === "ALL" ? lpnRows : lpnRows.filter((r) => (typeFilter === "PALLET" ? r.Pallet > 0 : r.Basket > 0));
+  const totalPallet = filteredLpnRows.reduce((sum, r) => sum + Number(r.Pallet || 0), 0);
+  const totalBasket = filteredLpnRows.reduce((sum, r) => sum + Number(r.Basket || 0), 0);
+  const avgStay = filteredLpnRows.length ? Math.round(filteredLpnRows.reduce((sum, r) => sum + Number(r.Stay_Days || 0), 0) / filteredLpnRows.length) : 0;
+  const inboundOrders = poList.filter((p) => isDateInRange(p.receiveDate || p.date || "2569-07-08", from, to));
+  const outboundOrders = platformOrders.filter((o) => isDateInRange(o.date, from, to));
+  const dailyMap = {};
+  const ensureDay = (d) => {
+    const key = dateInputOf(d);
+    if (!dailyMap[key]) dailyMap[key] = { date: key, inbound: 0, outbound: 0, pallet: 0, basket: 0 };
+    return dailyMap[key];
+  };
+  receivedRows.forEach((r) => {
+    const day = ensureDay(r.receiveDate || new Date());
+    day.inbound += Number(r.qty || 0);
+    const kind = lpnContainerOf(r);
+    if (kind === "Pallet") day.pallet += 1;
+    else day.basket += 1;
+  });
+  txRows.filter((t) => /pick|pack|ship/i.test(t.type || "")).forEach((t) => {
+    const day = ensureDay(t.t);
+    day.outbound += Number(t.qty || 0);
+  });
+  const dailyRows = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+  const statusRows = Object.values(filteredLpnRows.reduce((acc, r) => {
+    const key = r.Status || "UNKNOWN";
+    if (!acc[key]) acc[key] = { name: key, qty: 0, lpn: 0 };
+    acc[key].qty += Number(r.Qty || 0);
+    acc[key].lpn += 1;
+    return acc;
+  }, {}));
+  const containerRows = [
+    { name: "Pallet", value: totalPallet, color: "#3E7EE0" },
+    { name: "Basket", value: totalBasket, color: "#20C766" },
+  ].filter((r) => r.value > 0);
+  const exportRange = () => rowsToExcel(filteredLpnRows, "Total Summary", `WMS-total-summary-${from}-to-${to}`);
+  const printRange = () => window.print();
+  return (
+    <>
+      <div className="total-summary-hero">
+        <div>
+          <div className="section-title small">Total Summary Report</div>
+          <h2>สรุปยอดรับ-จ่าย และระยะเวลาการเก็บตาม LPN</h2>
+          <p>เลือกช่วงวันที่เพื่อดูปริมาณรับเข้า จ่ายออก จำนวนตะกร้า/พาเลท และอายุการเก็บสินค้าในคลังจาก LPN ตั้งแต่รับเข้าจนถึงกิจกรรมล่าสุด</p>
+        </div>
+        <div className="total-summary-actions">
+          <div className="field"><label>จากวันที่</label><input className="text-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+          <div className="field"><label>ถึงวันที่</label><input className="text-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+          <div className="field"><label>Container</label><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}><option value="ALL">ทั้งหมด</option><option value="PALLET">Pallet</option><option value="BASKET">Basket</option></select></div>
+          <button className="btn secondary" onClick={exportRange}><FileText size={13} /> Export Excel</button>
+          <button className="btn secondary" onClick={printRange}><Printer size={13} /> Export PDF</button>
+        </div>
+      </div>
+
+      <div className="grid g4" style={{ marginBottom: 16 }}>
+        <LpCard icon={ScanLine} label="Inbound Qty" value={inboundQty.toLocaleString()} sub={`${inboundOrders.length} PO / receiving docs`} variant="plan" tone="cyan" progress={Math.min(100, inboundQty / 30)} />
+        <LpCard icon={Truck} label="Outbound Qty" value={outboundQty.toLocaleString()} sub={`${outboundOrders.length} sales orders`} variant="good" tone="green" progress={Math.min(100, outboundQty / 30)} />
+        <LpCard icon={Boxes} label="Pallet / Basket" value={`${totalPallet} / ${totalBasket}`} sub={`${filteredLpnRows.length} LPN in selected range`} variant="info" tone="blue" />
+        <LpCard icon={Timer} label="Avg Stay" value={`${avgStay} วัน`} sub="เฉลี่ยตั้งแต่รับเข้าถึงกิจกรรมล่าสุด" variant={avgStay > 60 ? "bad" : "plan"} tone="amber" progress={Math.min(100, avgStay)} />
+      </div>
+
+      <div className="grid g2" style={{ marginBottom: 16 }}>
+        <div className="lp-panel">
+          <h3>Inbound / Outbound Trend</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={dailyRows} margin={{ top: 10, right: 18, left: -10, bottom: 0 }}>
+              <CartesianGrid stroke="#E8EEF7" strokeDasharray="3 3" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip {...lightTooltip} />
+              <Legend />
+              <Bar dataKey="inbound" name="Inbound Qty" fill="#17A9C0" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="outbound" name="Outbound Qty" fill="#3EC775" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="lp-panel">
+          <h3>Container Mix</h3>
+          <div className="wh-util-donut-row">
+            <ResponsiveContainer width="45%" height={235}>
+              <PieChart>
+                <Pie data={containerRows} dataKey="value" innerRadius={58} outerRadius={88} paddingAngle={3}>
+                  {containerRows.map((r) => <Cell key={r.name} fill={r.color} />)}
+                </Pie>
+                <Tooltip {...lightTooltip} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="wh-util-legend">
+              {containerRows.map((r) => <div className="recall-row" key={r.name}><span><i style={{ background: r.color }} />{r.name}</span><strong>{r.value.toLocaleString()}</strong></div>)}
+              <div className="wh-util-big">{filteredLpnRows.length}<span>Total LPN / Container Lots</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid g2" style={{ marginBottom: 16 }}>
+        <div className="lp-panel">
+          <h3>Pallet / Basket Daily Movement</h3>
+          <ResponsiveContainer width="100%" height={230}>
+            <LineChart data={dailyRows} margin={{ top: 10, right: 18, left: -10, bottom: 0 }}>
+              <CartesianGrid stroke="#E8EEF7" strokeDasharray="3 3" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip {...lightTooltip} />
+              <Legend />
+              <Line type="monotone" dataKey="pallet" name="Pallet" stroke="#3E7EE0" strokeWidth={3} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="basket" name="Basket" stroke="#20C766" strokeWidth={3} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="lp-panel">
+          <h3>Status Summary</h3>
+          <ResponsiveContainer width="100%" height={230}>
+            <BarChart data={statusRows} layout="vertical" margin={{ top: 10, right: 18, left: 50, bottom: 0 }}>
+              <CartesianGrid stroke="#E8EEF7" strokeDasharray="3 3" />
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} />
+              <Tooltip {...lightTooltip} />
+              <Bar dataKey="qty" name="Qty" fill="#F5A83C" radius={[0, 6, 6, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>Receive Date</th><th>Last Activity</th><th>LPN</th><th>SYNNEX ID</th><th>Item Name</th><th>Brand</th><th>Lot</th><th>Qty</th><th>Pallet</th><th>Basket</th><th>Stay Days</th><th>Location</th><th>Status</th></tr></thead>
+          <tbody>{filteredLpnRows.map((r) => (
+            <tr key={r.LPN}>
+              <td className="mono">{r.Receive_Date}</td><td className="mono">{r.Last_Activity}</td><td className="mono">{r.LPN}</td><td className="mono">{r.SYNNEX_ID}</td><td>{r.Item_Name}</td><td>{r.Brand}</td><td className="mono">{r.Lot}</td><td>{Number(r.Qty || 0).toLocaleString()}</td><td>{r.Pallet}</td><td>{r.Basket}</td><td>{r.Stay_Days}</td><td className="mono">{r.Current_Location}</td><td><StatusBadge code={r.Status || "AVL"} /></td>
             </tr>
           ))}</tbody>
         </table>
@@ -7665,6 +7880,14 @@ function GlobalStyle() {
       .vehicle-legend .cat-line i{width:10px;height:10px;border-radius:50%;display:inline-block;}
       @media (max-width:1180px){.vehicle-dashboard{grid-template-columns:1fr;}.vehicle-card-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
       @media (max-width:720px){.vehicle-card-grid{grid-template-columns:1fr;}.vehicle-card{grid-template-columns:auto 1fr;}.vehicle-service{grid-column:1/-1;text-align:left;}.vehicle-donut-wrap{flex-direction:column;align-items:stretch;}}
+      .total-summary-hero{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;background:linear-gradient(135deg,#F8FBFF,#EEF6FF);border:1px solid #D8E5F4;border-radius:16px;padding:18px 20px;margin-bottom:16px;box-shadow:0 10px 26px rgba(22,35,61,.07);}
+      .total-summary-hero h2{margin:4px 0 6px;color:var(--navy);font-family:'Space Grotesk';font-size:24px;letter-spacing:0;}
+      .total-summary-hero p{margin:0;color:var(--muted);font-size:12.5px;font-weight:700;line-height:1.55;max-width:760px;}
+      .total-summary-actions{display:grid;grid-template-columns:repeat(3,minmax(135px,1fr)) auto auto;gap:10px;align-items:end;min-width:min(100%,720px);}
+      .total-summary-actions .field{margin-bottom:0;}
+      .total-summary-actions .btn{height:38px;white-space:nowrap;}
+      @media (max-width:1180px){.total-summary-hero{display:block;}.total-summary-actions{margin-top:14px;grid-template-columns:repeat(3,minmax(0,1fr)) auto auto;}}
+      @media (max-width:760px){.total-summary-actions{grid-template-columns:1fr 1fr;}.total-summary-actions .field:nth-child(3),.total-summary-actions .btn{grid-column:1/-1;}}
 
       /* ---------- Executive dashboard ---------- */
       .exec-dashboard{background:linear-gradient(135deg,#F8FAFF 0%,#EEF3FA 100%);margin:-24px;padding:24px;min-height:100%;color:#17213A;}
