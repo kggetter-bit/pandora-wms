@@ -5611,18 +5611,148 @@ function Packing({ allocOrders = [], setAllocOrders = () => {}, stock = [], pick
   );
 }
 
+const SHIP_REF_INVOICE_STANDARDS = [
+  { type: "Normal", label: "บิลปกติ", pattern: "IV + 12 หลัก", example: "IV553260900115", rule: "ไม่มี Lot ใช้เป็นบิลสุดท้ายของใบกำกับเดียว และถ้าไม่ระบุกล่องให้ถือว่า 1/1" },
+  { type: "Multi", label: "บิล MULTI", pattern: "IV + 12 หลัก + Lot 2 หลัก", example: "IV55226090039001-02-01-03", rule: "2 หลักท้ายของเลขบิลคือ Lot และส่วนท้ายคือ รวม Lot / กล่องที่ / รวมกล่อง" },
+];
+
+const SHIP_REF_INVOICE_DOCS_INIT = [
+  {
+    id: "SREF-PO20241001-IV552260900390",
+    po: "PO20241001",
+    order: "SO-88213",
+    invoice: "IV552260900390",
+    mode: "MULTI",
+    customer: "IT City Co., Ltd.",
+    truck: "TRUCK-4W-01",
+    lots: [
+      { lot: "01", totalLots: "02", boxes: [{ box: "01", total: "03", scanned: true }, { box: "02", total: "03", scanned: true }, { box: "03", total: "03", scanned: true }] },
+      { lot: "02", totalLots: "02", boxes: [{ box: "01", total: "02", scanned: true }, { box: "02", total: "02", scanned: false }] },
+    ],
+  },
+  {
+    id: "SREF-TCWTELECCD-IV553260900115",
+    po: "TCWTELECCD",
+    order: "SO-88270",
+    invoice: "IV553260900115",
+    mode: "NORMAL",
+    customer: "Banana IT",
+    truck: "TRUCK-6W-02",
+    lots: [{ lot: "01", totalLots: "01", boxes: [{ box: "01", total: "01", scanned: true }] }],
+  },
+];
+
+const refInvoiceStats = (doc = {}) => {
+  const boxes = (doc.lots || []).flatMap((lot) => lot.boxes || []);
+  const scanned = boxes.filter((b) => b.scanned).length;
+  return { total: boxes.length, scanned, complete: boxes.length > 0 && scanned >= boxes.length };
+};
+
+const normalizeTwoDigit = (value, fallback = "01") => String(value || fallback).padStart(2, "0").slice(-2);
+
+function parseShipRefInvoice(value = "") {
+  const raw = String(value || "").trim().toUpperCase();
+  if (!raw) return { ok: false, message: "กรุณาสแกน Ref Invoice ก่อน" };
+  const [invoicePart = "", ...parts] = raw.split("-").map((v) => v.trim()).filter(Boolean);
+  const match = invoicePart.match(/^IV(\d{12})(\d{2})?$/);
+  if (!match) return { ok: false, message: "รูปแบบ Ref Invoice ต้องเป็น IV + 12 หลัก หรือ IV + 12 หลัก + Lot 2 หลัก" };
+  const base = `IV${match[1]}`;
+  const embeddedLot = match[2] || "";
+  if (embeddedLot || parts.length >= 3) {
+    return {
+      ok: true,
+      mode: "MULTI",
+      raw,
+      base,
+      invoice: `${base}${normalizeTwoDigit(embeddedLot || parts[0])}`,
+      lot: normalizeTwoDigit(embeddedLot || parts[0]),
+      totalLots: normalizeTwoDigit(parts.length >= 3 ? parts[0] : "01"),
+      boxNo: normalizeTwoDigit(parts.length >= 3 ? parts[1] : parts[0]),
+      totalBoxes: normalizeTwoDigit(parts.length >= 3 ? parts[2] : parts[1]),
+    };
+  }
+  return {
+    ok: true,
+    mode: "NORMAL",
+    raw,
+    base,
+    invoice: base,
+    lot: "01",
+    totalLots: "01",
+    boxNo: normalizeTwoDigit(parts[0]),
+    totalBoxes: normalizeTwoDigit(parts[1]),
+  };
+}
+
 function Shipping({ allocOrders = [], setAllocOrders = () => {}, stock = [], setStock = () => {}, addTx = () => {}, notify = () => {}, confirmAction = ({ onConfirm }) => onConfirm?.(), userSession }) {
   const rows = allocOrders.filter((o) => ["Packed", "Shipping", "Shipped"].includes(o.status)).slice(0, 24);
   const [activeId, setActiveId] = useState(rows.find((o) => o.status !== "Shipped")?.id || rows[0]?.id || "");
   const active = rows.find((o) => o.id === activeId) || rows[0];
   const [scan, setScan] = useState({ awb: "", bill: "", po: "", truck: "TRUCK-BKK-01", seal: "" });
+  const [refInvoiceScan, setRefInvoiceScan] = useState("IV55226090039002-02-02-02");
+  const [refDocs, setRefDocs] = useState(SHIP_REF_INVOICE_DOCS_INIT);
+  const [refScanResult, setRefScanResult] = useState(null);
   const activePickedRows = active ? stock.filter((s) => s.allocatedFor === active.id && ["PICKED", "PACKED"].includes(s.status)) : [];
   const activeLots = [...new Set(activePickedRows.map(lotCodeOf).filter(Boolean))];
+  const activeRefDocs = refDocs.filter((d) => d.order === active?.id || (scan.po && d.po === scan.po) || (scan.bill && (d.invoice === scan.bill || scan.bill.startsWith(d.invoice))));
+  const scanRefInvoice = () => {
+    const parsed = parseShipRefInvoice(refInvoiceScan);
+    if (!parsed.ok) {
+      setRefScanResult({ type: "danger", message: parsed.message });
+      return notify("Ref Invoice ไม่ถูกต้อง", parsed.message, "danger");
+    }
+    let foundDoc;
+    let foundLot;
+    let foundBox;
+    refDocs.forEach((doc) => {
+      if (foundDoc) return;
+      const isSameInvoice = doc.invoice === parsed.base || (doc.mode === "MULTI" && (doc.lots || []).some((lot) => `${doc.invoice}${lot.lot}` === parsed.invoice));
+      if (!isSameInvoice) return;
+      const lot = (doc.lots || []).find((l) => l.lot === parsed.lot) || (parsed.mode === "NORMAL" ? doc.lots?.[0] : null);
+      const box = lot?.boxes?.find((b) => b.box === parsed.boxNo);
+      if (lot && box) {
+        foundDoc = doc;
+        foundLot = lot;
+        foundBox = box;
+      }
+    });
+    if (!foundDoc || !foundLot || !foundBox) {
+      const message = `${parsed.raw}: ไม่พบเลขบิล / Lot / กล่องนี้ในรายการรอขึ้นรถ`;
+      setRefScanResult({ type: "danger", message });
+      return notify("ไม่พบ Ref Invoice", message, "danger");
+    }
+    if (foundBox.scanned) {
+      const message = `${foundDoc.invoice}${foundDoc.mode === "MULTI" ? foundLot.lot : ""} กล่อง ${foundBox.box}/${foundBox.total} ถูกสแกนแล้ว`;
+      setRefScanResult({ type: "warning", message });
+      return notify("สแกนซ้ำ", message, "warning");
+    }
+    const scanTime = new Date().toISOString();
+    setRefDocs((list) => list.map((doc) => doc.id !== foundDoc.id ? doc : {
+      ...doc,
+      truck: scan.truck || doc.truck,
+      lots: doc.lots.map((lot) => lot.lot !== foundLot.lot ? lot : {
+        ...lot,
+        boxes: lot.boxes.map((box) => box.box === foundBox.box ? { ...box, scanned: true, scannedAt: scanTime, scannedBy: userSession?.user || "system" } : box),
+      }),
+    }));
+    const stats = refInvoiceStats({ ...foundDoc, lots: foundDoc.lots.map((lot) => lot.lot !== foundLot.lot ? lot : { ...lot, boxes: lot.boxes.map((box) => box.box === foundBox.box ? { ...box, scanned: true } : box) }) });
+    const message = `${foundDoc.invoice}${foundDoc.mode === "MULTI" ? foundLot.lot : ""} · Lot ${foundLot.lot} · กล่อง ${foundBox.box}/${foundBox.total} (${stats.scanned}/${stats.total})`;
+    setRefScanResult({ type: stats.complete ? "success" : "info", message });
+    setScan((s) => ({ ...s, bill: parsed.invoice, po: foundDoc.po, truck: s.truck || foundDoc.truck }));
+    addTx({ type: "Ship Ref Invoice Scan", detail: `${parsed.raw}: scan ship-to-truck ref invoice · PO ${foundDoc.po} · Order ${foundDoc.order} · Lot ${foundLot.lot} · Box ${foundBox.box}/${foundBox.total}`, orderId: foundDoc.order, refInvoice: parsed.invoice, lot: foundLot.lot, lotCode: foundLot.lot, loc: "LOAD-STAGING", user: userSession?.user || "system" });
+    notify(stats.complete ? "Ref Invoice ครบแล้ว" : "สแกน Ref Invoice สำเร็จ", message, stats.complete ? "success" : "info");
+  };
   const shipOrder = () => {
     if (!active) return;
     if (!scan.awb && !scan.bill && !scan.po) return notify("ยังไม่ได้ยิงเอกสาร", "ต้องสแกน AWB หรือ Bill หรือ PO ก่อนขึ้นรถ", "danger");
+    const incompleteRef = activeRefDocs.find((d) => !refInvoiceStats(d).complete);
+    if (incompleteRef) {
+      const stats = refInvoiceStats(incompleteRef);
+      return notify("Ref Invoice ยังไม่ครบ", `${incompleteRef.invoice}: สแกนแล้ว ${stats.scanned}/${stats.total} กล่อง ต้องยิงให้ครบก่อน Ship to Truck`, "danger");
+    }
     setAllocOrders((list) => list.map((o) => o.id === active.id ? { ...o, status: "Shipped", shippedAt: new Date().toISOString(), shippedBy: userSession?.user || "system", awb: scan.awb, bill: scan.bill, shipPo: scan.po, truckNo: scan.truck, sealNo: scan.seal } : o));
     setStock((list) => list.filter((s) => !(s.allocatedFor === active.id && ["PICKED", "PACKED"].includes(s.status))));
+    setRefDocs((list) => list.map((d) => activeRefDocs.some((a) => a.id === d.id) ? { ...d, status: "Loaded", loadedAt: new Date().toISOString(), truck: scan.truck } : d));
     addTx({ type: "Ship", detail: `${active.id}: Ship to truck ${scan.truck} · AWB ${scan.awb || "-"} · Bill ${scan.bill || "-"} · PO ${scan.po || "-"} · Lot ${activeLots.join(", ") || "-"} · ตัด Stock จบ Process Pick > Pack > Ship`, orderId: active.id, lot: activeLots.join(", "), lotCode: activeLots.join(", "), loc: "LOAD-STAGING", user: userSession?.user || "system" });
     notify("Ship สำเร็จ", `${active.id} ขึ้นรถและตัด Stock แล้ว`, "success");
     setScan({ awb: "", bill: "", po: "", truck: "TRUCK-BKK-01", seal: "" });
@@ -5634,12 +5764,25 @@ function Shipping({ allocOrders = [], setAllocOrders = () => {}, stock = [], set
         <LpCard icon={PackageCheck} label="Packed Ready" value={rows.filter((o) => o.status === "Packed").length} sub="รอขึ้นรถ" variant="good" />
         <LpCard icon={Truck} label="Shipping" value={rows.filter((o) => o.status === "Shipping").length} sub="กำลังโหลด" variant="info" />
         <LpCard icon={CheckCircle2} label="Shipped" value={rows.filter((o) => o.status === "Shipped").length} sub="ตัด Stock แล้ว" variant="plan" />
-        <LpCard icon={ScanLine} label="Scan Doc" value="AWB/Bill/PO" sub="เอกสารขึ้นรถ" variant="plan" />
+        <LpCard icon={ScanLine} label="Ref Invoice" value={refDocs.filter((d) => refInvoiceStats(d).complete).length + "/" + refDocs.length} sub="สแกนครบตาม Lot/กล่อง" variant="plan" />
       </div>
       <div className="grid g2">
         <div className="card">
-          <h3>Scan AWB / Bill / PO ขึ้นรถ</h3>
+          <h3>Scan Ship to Truck / Ref Invoice</h3>
           <div className="field"><label>เลือก Order</label><select value={active?.id || ""} onChange={(e) => setActiveId(e.target.value)}>{rows.map((o) => <option key={o.id} value={o.id}>{o.id} · {o.customer || "-"} · {o.status}</option>)}</select></div>
+          <div className="ship-ref-scanner">
+            <div className="field">
+              <label>Ref Invoice Barcode</label>
+              <input value={refInvoiceScan} onChange={(e) => setRefInvoiceScan(e.target.value)} onKeyDown={(e) => e.key === "Enter" && scanRefInvoice()} placeholder="IV55226090039001-02-01-03" />
+              <div className="kpi-sub">รองรับบิลปกติและบิล MULTI: Invoice + Lot + ลำดับกล่อง เพื่อเช็คว่าขึ้นรถครบทุกกล่อง</div>
+            </div>
+            {refScanResult && <div className={`ship-ref-alert ${refScanResult.type}`}>{refScanResult.message}</div>}
+            <div className="ship-ref-actions">
+              <button className="btn secondary" onClick={() => setRefInvoiceScan("IV55226090039002-02-02-02")}><ScanLine size={13} /> ตัวอย่างบิล MULTI</button>
+              <button className="btn secondary" onClick={() => setRefInvoiceScan("IV553260900115")}><ScanLine size={13} /> ตัวอย่างบิลปกติ</button>
+              <button className="btn" onClick={scanRefInvoice}><ScanLine size={13} /> Scan Ref Invoice</button>
+            </div>
+          </div>
           <div className="grid g2">
             <div className="field"><label>AWB</label><input value={scan.awb} onChange={(e) => setScan({ ...scan, awb: e.target.value })} placeholder="AWB-TH-000123" /></div>
             <div className="field"><label>Bill</label><input value={scan.bill} onChange={(e) => setScan({ ...scan, bill: e.target.value })} placeholder="BILL-256907-001" /></div>
@@ -5649,6 +5792,39 @@ function Shipping({ allocOrders = [], setAllocOrders = () => {}, stock = [], set
           </div>
           <button className="btn secondary" style={{ marginRight: 8 }} onClick={() => setScan({ awb: `AWB-${rand(100000, 999999)}`, bill: `BILL-${rand(1000, 9999)}`, po: `RO-${rand(1000, 9999)}`, truck: "TRUCK-BKK-01", seal: `SEAL-${rand(100, 999)}` })}><ScanLine size={13} /> เติมค่าทดสอบ</button>
           <button className="btn" disabled={!active || active.status === "Shipped"} onClick={() => confirmAction({ title: "Confirm Ship to Truck", message: `ยืนยันยิงเอกสารขึ้นรถและตัด Stock ของ ${active?.id || ""}?`, onConfirm: shipOrder })}><Truck size={13} /> Ship to Truck</button>
+        </div>
+        <div className="card">
+          <h3>Ref Invoice Standard</h3>
+          <div className="ref-standard-grid">
+            {SHIP_REF_INVOICE_STANDARDS.map((s) => <div className="ref-standard-card" key={s.type}><b>{s.label}</b><span>{s.pattern}</span><code>{s.example}</code><small>{s.rule}</small></div>)}
+          </div>
+          <div className="ref-structure">
+            <span>IV552260900390</span><b>01</b><em>-</em><b>02</b><em>-</em><b>01</b><em>-</em><b>03</b>
+            <small>เลขบิลจริง / Lot / รวม Lot / กล่องที่ / รวมกล่อง</small>
+          </div>
+        </div>
+      </div>
+      <div className="grid g2" style={{ marginTop: 14 }}>
+        <div className="card">
+          <h3>Ref Invoice Loading Status</h3>
+          <div className="ref-doc-list">
+            {refDocs.map((doc) => {
+              const stats = refInvoiceStats(doc);
+              return (
+                <div className={`ref-doc-card ${stats.complete ? "complete" : "pending"}`} key={doc.id}>
+                  <div className="ref-doc-head">
+                    <div><b className="mono">{doc.invoice}</b> <span className={`chip tiny ${doc.mode === "MULTI" ? "active" : ""}`}>{doc.mode === "MULTI" ? "MULTI" : "Normal"}</span><div className="kpi-sub">{doc.po} · {doc.order} · {doc.customer}</div></div>
+                    <span className={stats.complete ? "status-pill success" : "status-pill warn"}>{stats.complete ? "ครบแล้ว" : "กำลังรับ"}</span>
+                  </div>
+                  {(doc.lots || []).map((lot) => {
+                    const lotScanned = (lot.boxes || []).filter((b) => b.scanned).length;
+                    return <div className="ref-lot-row" key={lot.lot}><div><b>Lot {lot.lot}</b><small>{lotScanned}/{lot.boxes.length} กล่อง</small></div><div className="ref-box-row">{(lot.boxes || []).map((box) => <span key={box.box} className={`ref-box ${box.scanned ? "done" : ""}`}>{box.scanned ? "✓" : box.box}</span>)}</div></div>;
+                  })}
+                  <div className="kpi-sub">รวม {stats.scanned}/{stats.total} กล่อง · Truck {doc.truck || scan.truck}</div>
+                </div>
+              );
+            })}
+          </div>
         </div>
         <div className="table-wrap">
           <table><thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>AWB</th><th>Bill</th><th>Truck</th><th>Picked/Packed LPN</th><th>Lot</th></tr></thead><tbody>{rows.map((o) => { const orderStock = stock.filter((s) => s.allocatedFor === o.id); return <tr key={o.id}><td className="mono">{o.id}</td><td>{o.customer || "-"}</td><td><OrderStatusPill status={o.status} /></td><td className="mono">{o.awb || "-"}</td><td className="mono">{o.bill || "-"}</td><td>{o.truckNo || "-"}</td><td className="mono">{orderStock.map((s) => s.lpn || "-").join(", ") || "-"}</td><td className="mono">{[...new Set(orderStock.map(lotCodeOf).filter(Boolean))].join(", ") || "-"}</td></tr>; })}</tbody></table>
@@ -7682,6 +7858,38 @@ function GlobalStyle() {
       .allocation-progress-strip div{background:var(--panel-raised);border:1px solid var(--border);border-radius:10px;padding:9px 10px;}
       .allocation-progress-strip span{display:block;font-size:10.5px;color:var(--muted);font-weight:700;margin-bottom:3px;}
       .allocation-progress-strip b{font-family:'Space Grotesk';font-size:20px;color:var(--navy);}
+      .ship-ref-scanner{border:1px solid rgba(62,126,224,.22);background:#F6FAFF;border-radius:14px;padding:12px;margin:10px 0 14px;}
+      .ship-ref-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+      .ship-ref-alert{border-radius:10px;padding:9px 11px;font-size:12px;font-weight:800;margin-top:8px;border:1px solid var(--border);}
+      .ship-ref-alert.success{background:rgba(62,199,117,.12);border-color:rgba(62,199,117,.35);color:#16945E;}
+      .ship-ref-alert.info{background:rgba(62,126,224,.12);border-color:rgba(62,126,224,.32);color:#2B65C8;}
+      .ship-ref-alert.warning{background:rgba(245,168,60,.15);border-color:rgba(245,168,60,.4);color:#A86A00;}
+      .ship-ref-alert.danger{background:rgba(241,91,113,.12);border-color:rgba(241,91,113,.38);color:#D9435A;}
+      .ref-standard-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px;}
+      .ref-standard-card{border:1px solid var(--border);background:var(--panel-raised);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:5px;}
+      .ref-standard-card b{font-size:13px;color:var(--navy);}
+      .ref-standard-card span{font-size:11px;color:var(--muted);font-weight:800;}
+      .ref-standard-card code{font-family:'JetBrains Mono';font-size:12px;background:#EAF1FB;border-radius:8px;padding:6px 8px;color:#0F2747;}
+      .ref-standard-card small{font-size:11px;color:#66758A;line-height:1.45;}
+      .ref-structure{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed #C8D6EA;border-radius:12px;padding:12px;background:#FFFFFF;}
+      .ref-structure span,.ref-structure b{font-family:'JetBrains Mono';font-size:16px;color:var(--navy);}
+      .ref-structure b{background:#EBDDFF;color:#6D39C7;border-radius:8px;padding:5px 8px;}
+      .ref-structure em{font-style:normal;color:#8794A7;font-weight:900;}
+      .ref-structure small{flex-basis:100%;color:var(--muted);font-size:11px;font-weight:800;}
+      .ref-doc-list{display:flex;flex-direction:column;gap:10px;max-height:460px;overflow:auto;padding-right:4px;}
+      .ref-doc-card{border:1px solid var(--border);background:#FFFFFF;border-left:4px solid #F5A83C;border-radius:14px;padding:12px;box-shadow:0 10px 24px rgba(22,35,61,.05);}
+      .ref-doc-card.complete{border-left-color:#3EC775;}
+      .ref-doc-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:10px;}
+      .ref-doc-head .chip.tiny{font-size:10px;padding:2px 7px;margin-left:5px;}
+      .status-pill.success,.status-pill.warn{border-radius:999px;padding:5px 10px;font-size:11px;font-weight:900;white-space:nowrap;}
+      .status-pill.success{background:rgba(62,199,117,.14);color:#16945E;}
+      .status-pill.warn{background:rgba(245,168,60,.16);color:#A86A00;}
+      .ref-lot-row{display:grid;grid-template-columns:85px 1fr;gap:10px;align-items:center;border:1px solid #E4ECF6;border-radius:12px;padding:9px;margin-bottom:8px;background:#F9FBFE;}
+      .ref-lot-row b{display:block;font-size:12px;color:var(--navy);}
+      .ref-lot-row small{display:block;font-size:10.5px;color:var(--muted);font-weight:800;}
+      .ref-box-row{display:flex;gap:8px;flex-wrap:wrap;}
+      .ref-box{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid #D8E3F1;background:#FFFFFF;color:#64748B;font-family:'JetBrains Mono';font-weight:900;font-size:12px;}
+      .ref-box.done{background:#118A52;border-color:#118A52;color:#FFFFFF;}
       .allocation-event-log{margin-top:12px;border-top:1px dashed var(--border);padding-top:10px;}
       .allocation-event{display:grid;grid-template-columns:155px 140px 1fr;gap:10px;align-items:center;font-size:12px;padding:6px 0;border-bottom:1px solid rgba(214,222,232,.55);}
       .allocation-event:last-child{border-bottom:0;}
