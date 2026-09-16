@@ -487,8 +487,9 @@ const NAV_GROUPS = [
       { id: "cyclecount", label: "2. Cycle Count", icon: ClipboardCheck },
       { id: "register", label: "3. Inventory Register", icon: PackageSearch },
       { id: "invhold", label: "4. Inventory Overview", icon: Boxes },
-      { id: "aging", label: "5. Aging", icon: Clock },
-      { id: "cover", label: "6. Stock Cover Day", icon: TrendingUp },
+      { id: "stockreconcile", label: "5. Stock Reconcile", icon: ArrowLeftRight },
+      { id: "aging", label: "6. Aging", icon: Clock },
+      { id: "cover", label: "7. Stock Cover Day", icon: TrendingUp },
     ]
   },
   {
@@ -1182,6 +1183,7 @@ export default function App() {
             {view === "inventory" && <InventoryTransaction {...ctx} />}
             {view === "cyclecount" && <CycleCount {...ctx} />}
             {view === "register" && <InventoryRegister stock={stock} />}
+            {view === "stockreconcile" && <StockReconcile stock={stock} />}
             {view === "replenishment" && <Replenishment {...ctx} />}
             {view === "allocation" && <AllocationOrder {...ctx} />}
             {view === "picking" && <Picking />}
@@ -2606,6 +2608,133 @@ function ProductRegisterBoard({ title = "Inventory Register", subtitle = "", row
 function InventoryRegister({ stock = [] }) {
   const rows = inventoryRowsOf(stock).map(registerRowFromInventory);
   return <><div className="section-title">Inventory Register</div><ProductRegisterBoard title="Inventory Register" subtitle={`${rows.length} LPN / location records · searchable product register view`} rows={rows} /></>;
+}
+
+const RECONCILE_DATES = [
+  { label: "06 ก.ย.", erp: "D365" },
+  { label: "07 ก.ย.", erp: "D366" },
+  { label: "08 ก.ย.", erp: "D367" },
+  { label: "09 ก.ย.", erp: "D368" },
+  { label: "10 ก.ย.", erp: "D369" },
+  { label: "11 ก.ย.", erp: "D370" },
+];
+const RECONCILE_ITEM_CODES = [
+  ["DH-PFM320-010US", "DAHUA", 34137],
+  ["ADT-MCYX4TH/A", "APPLE", 24629],
+  ["SDSQUAB-064G-GN6MN", "SANDISK", 23705],
+  ["PRM-SHOPPING-BAG", "NINTENDO", 23441],
+  ["SDSQUNR-064G-GN3MN", "SANDISK", 23193],
+  ["T00V100", "EPSON", 21469],
+  ["KEYBOARD_K120(USB)", "LOGITECH", 19016],
+  ["SDSQUNR-032G-GN3MN", "SANDISK", 17163],
+  ["SDSQUNR-128G-GN6MN", "SANDISK", 16122],
+  ["T00V200", "EPSON", 13276],
+  ["IDEA-MAX", "IDEA", 11680],
+  ["NB-ASUS-X1504", "ASUS", 10420],
+  ["SSD-KING-NV2", "KINGSTON", 9830],
+  ["RT-TPLINK-AX55", "TP-LINK", 8420],
+  ["CAM-LOGI-C270", "LOGITECH", 7360],
+];
+
+const buildReconcileRows = (mode = "Inbound") => RECONCILE_ITEM_CODES.map(([itemId, brand, base], idx) => {
+  const modeOffset = mode === "Outbound" ? -460 : mode === "Storage" ? 820 : 0;
+  const days = RECONCILE_DATES.map((d, dayIdx) => {
+    const d365 = base + modeOffset + ((dayIdx * 3 + idx) % 11) - 4;
+    const diffSeed = ((idx + dayIdx * 2) % 9) - 4;
+    const diff = diffSeed === 0 && (idx + dayIdx) % 3 === 0 ? 0 : diffSeed;
+    return { ...d, d365, wms: d365 - diff, diff };
+  });
+  return { itemId, brand, days };
+});
+
+function StockReconcile() {
+  const [mode, setMode] = useState("Inbound");
+  const [date, setDate] = useState("11 ก.ย.");
+  const [q, setQ] = useState("");
+  const rows = buildReconcileRows(mode).filter((r) => `${r.itemId} ${r.brand}`.toLowerCase().includes(q.toLowerCase()));
+  const diffs = rows.flatMap((r) => r.days.map((d) => d.diff));
+  const positive = diffs.filter((d) => d > 0).length;
+  const negative = diffs.filter((d) => d < 0).length;
+  const zero = diffs.filter((d) => d === 0).length;
+  const totalAbs = diffs.reduce((a, d) => a + Math.abs(d), 0);
+  const trend = RECONCILE_DATES.map((d, i) => ({
+    date: d.label,
+    plus: rows.reduce((a, r) => a + Math.max(0, r.days[i].diff), 0),
+    minus: rows.reduce((a, r) => a + Math.min(0, r.days[i].diff), 0),
+  }));
+  const diffClass = (v) => v > 0 ? "reconcile-diff plus" : v < 0 ? "reconcile-diff minus" : "reconcile-diff zero";
+  return (
+    <>
+      <div className="section-title">Stock Reconcile - D365 / WMS Diff Summary</div>
+      <div className="grid g4" style={{ marginBottom: 14 }}>
+        <LpCard icon={Boxes} label="SKU Reconciled" value={rows.length} sub={`${mode} · ${date}`} variant="info" />
+        <LpCard icon={AlertTriangle} label="D365 > WMS" value={positive} sub="ค่าบวก ต้องตรวจรับ/ตัดจ่าย" variant="plan" tone="amber" />
+        <LpCard icon={RefreshCw} label="D365 < WMS" value={negative} sub="ค่าลบ ต้องตรวจ WMS movement" variant="good" tone="green" />
+        <LpCard icon={CheckCircle2} label="Matched / Total Diff" value={`${zero} / ${totalAbs}`} sub="ศูนย์ = ตรงกัน" variant="info" />
+      </div>
+      <div className="grid g2" style={{ marginBottom: 14 }}>
+        <div className="card">
+          <h3>Reconcile Trend</h3>
+          <ResponsiveContainer width="100%" height={190}>
+            <BarChart data={trend} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="plus" fill="#F5A623" name="D365 มากกว่า WMS" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="minus" fill="#6FCF97" name="D365 น้อยกว่า WMS" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="card">
+          <h3>Reconcile Control</h3>
+          <div className="reconcile-control-row">
+            {["Inbound", "Outbound", "Storage"].map((m) => <button key={m} className={`btn secondary ${mode === m ? "active" : ""}`} onClick={() => setMode(m)}>{m}</button>)}
+            <select value={date} onChange={(e) => setDate(e.target.value)}>{RECONCILE_DATES.map((d) => <option key={d.label}>{d.label}</option>)}</select>
+            <div className="search-box reconcile-search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา Item ID / Brand..." /></div>
+            <button className="btn"><FileText size={13} /> Export Summary</button>
+          </div>
+          <div className="reconcile-legend">
+            <span><i className="legend-dot plus" /> ค่าบวก: D365 มากกว่า WMS</span>
+            <span><i className="legend-dot minus" /> ค่าลบ: D365 น้อยกว่า WMS</span>
+            <span><i className="legend-dot zero" /> ศูนย์: ตรงกัน</span>
+          </div>
+          <div className="reconcile-note">
+            ใช้สำหรับเทียบยอดระบบต้นทางกับ WMS รายวัน แยกตาม Inbound / Outbound / Storage และใช้เป็นจุดเปิดงานตรวจสอบก่อนปรับปรุง Stock จริง
+          </div>
+        </div>
+      </div>
+      <div className="reconcile-panel">
+        <div className="reconcile-table-scroll">
+          <table className="reconcile-table">
+            <thead>
+              <tr>
+                <th rowSpan={2} className="sticky-col item">Item ID</th>
+                <th rowSpan={2} className="sticky-col brand">Brand</th>
+                {RECONCILE_DATES.map((d) => <th key={d.label} colSpan={3}>{d.label}</th>)}
+              </tr>
+              <tr>
+                {RECONCILE_DATES.map((d) => <React.Fragment key={`${d.label}-sub`}><th>{d.erp}</th><th>WMS</th><th>Diff</th></React.Fragment>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.itemId}>
+                  <td className="sticky-col item mono strong">{r.itemId}</td>
+                  <td className="sticky-col brand">{r.brand}</td>
+                  {r.days.map((d) => <React.Fragment key={`${r.itemId}-${d.label}`}>
+                    <td className="num">{d.d365.toLocaleString()}</td>
+                    <td className="num">{d.wms.toLocaleString()}</td>
+                    <td className={diffClass(d.diff)}>{d.diff > 0 ? `+${d.diff}` : d.diff}</td>
+                  </React.Fragment>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
 }
 
 function ItemDetailExperience({ item, onClose, onEdit }) {
@@ -7706,6 +7835,34 @@ function GlobalStyle() {
       .table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;overflow-x:auto;}
       .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;}
       .badge.A{background:rgba(241,91,113,0.24);color:var(--danger);} .badge.B{background:rgba(62,126,224,0.24);color:var(--amber);} .badge.C{background:rgba(139,150,165,0.24);color:var(--muted);}
+      .reconcile-control-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 12px;}
+      .reconcile-control-row .btn.active{background:#B8733E;color:#FFFFFF;border-color:#B8733E;}
+      .reconcile-control-row select{height:38px;border:1px solid var(--border);border-radius:8px;background:var(--panel-raised);padding:0 12px;font-family:'Sarabun';font-size:13px;color:var(--text);}
+      .reconcile-search{margin:0;min-width:270px;max-width:360px;flex:1;}
+      .reconcile-legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 12px;color:var(--muted);font-size:12px;font-weight:700;}
+      .reconcile-legend span{display:inline-flex;align-items:center;gap:7px;}
+      .legend-dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
+      .legend-dot.plus{background:#F7E5A5;}.legend-dot.minus{background:#D8EDC6;}.legend-dot.zero{background:#ECE8E2;}
+      .reconcile-note{background:rgba(184,115,62,.1);border:1px solid rgba(184,115,62,.22);border-radius:10px;padding:10px 12px;color:#704522;font-size:12px;line-height:1.45;}
+      .reconcile-panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;box-shadow:0 12px 30px rgba(22,35,61,.06);}
+      .reconcile-table-scroll{max-height:620px;overflow:auto;border-radius:13px;border:1px solid var(--border);}
+      .reconcile-table{border-collapse:separate;border-spacing:0;min-width:1580px;width:100%;font-size:12px;background:#FFFDF9;}
+      .reconcile-table th{position:sticky;top:0;z-index:3;background:#E8D5C3;color:#6C4A31;border-right:1px solid #F5EFE8;border-bottom:1px solid #F5EFE8;text-align:center;padding:11px 10px;font-weight:900;white-space:nowrap;}
+      .reconcile-table thead tr:nth-child(2) th{top:40px;background:#F2E5D8;}
+      .reconcile-table td{border-right:1px solid #EEE5DC;border-bottom:1px solid #EEE5DC;padding:10px 12px;white-space:nowrap;background:#FFFCF8;}
+      .reconcile-table tbody tr:nth-child(even) td{background:#FBF4EC;}
+      .reconcile-table .num{text-align:right;font-family:'JetBrains Mono';font-size:12px;}
+      .reconcile-table .strong{font-weight:900;color:#2B2F38;}
+      .reconcile-table .sticky-col{position:sticky;z-index:2;}
+      .reconcile-table th.sticky-col{z-index:4;}
+      .reconcile-table .sticky-col.item{left:0;min-width:190px;}
+      .reconcile-table .sticky-col.brand{left:190px;min-width:100px;}
+      .reconcile-table td.sticky-col.item,.reconcile-table td.sticky-col.brand{background:#FFF9F1;}
+      .reconcile-table tbody tr:nth-child(even) td.sticky-col.item,.reconcile-table tbody tr:nth-child(even) td.sticky-col.brand{background:#F8EFE5;}
+      .reconcile-diff{text-align:center!important;font-family:'JetBrains Mono';font-weight:900;min-width:52px;}
+      .reconcile-diff.plus{background:#F8E5A5!important;color:#6B4B00;}
+      .reconcile-diff.minus{background:#D8EDC6!important;color:#1C6633;}
+      .reconcile-diff.zero{background:#EEEAE4!important;color:#80746A;}
       .search-box{display:flex;align-items:center;gap:8px;background:var(--panel-raised);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:14px;max-width:340px;}
       .search-box input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:100%;font-family:'Sarabun';}
       .tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
