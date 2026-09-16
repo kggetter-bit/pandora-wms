@@ -2619,39 +2619,43 @@ const RECONCILE_DATES = [
   { label: "11 ก.ย.", erp: "D370" },
 ];
 const RECONCILE_ITEM_CODES = [
-  ["DH-PFM320-010US", "DAHUA", 34137],
-  ["ADT-MCYX4TH/A", "APPLE", 24629],
-  ["SDSQUAB-064G-GN6MN", "SANDISK", 23705],
-  ["PRM-SHOPPING-BAG", "NINTENDO", 23441],
-  ["SDSQUNR-064G-GN3MN", "SANDISK", 23193],
-  ["T00V100", "EPSON", 21469],
-  ["KEYBOARD_K120(USB)", "LOGITECH", 19016],
-  ["SDSQUNR-032G-GN3MN", "SANDISK", 17163],
-  ["SDSQUNR-128G-GN6MN", "SANDISK", 16122],
-  ["T00V200", "EPSON", 13276],
-  ["IDEA-MAX", "IDEA", 11680],
-  ["NB-ASUS-X1504", "ASUS", 10420],
-  ["SSD-KING-NV2", "KINGSTON", 9830],
-  ["RT-TPLINK-AX55", "TP-LINK", 8420],
-  ["CAM-LOGI-C270", "LOGITECH", 7360],
+  ["6425013001", "DH-PFM320-010US", "DAHUA", 34137],
+  ["6425013002", "ADT-MCYX4TH/A", "APPLE", 24629],
+  ["6425013003", "SDSQUAB-064G-GN6MN", "SANDISK", 23705],
+  ["6425013004", "PRM-SHOPPING-BAG", "NINTENDO", 23441],
+  ["6425013005", "SDSQUNR-064G-GN3MN", "SANDISK", 23193],
+  ["6425013006", "T00V100", "EPSON", 21469],
+  ["6425013007", "KEYBOARD_K120(USB)", "LOGITECH", 19016],
+  ["6425013008", "SDSQUNR-032G-GN3MN", "SANDISK", 17163],
+  ["6425013009", "SDSQUNR-128G-GN6MN", "SANDISK", 16122],
+  ["6425013010", "T00V200", "EPSON", 13276],
+  ["6425013011", "IDEA-MAX", "IDEA", 11680],
+  ["6425011001", "NB-ASUS-X1504", "ASUS", 10420],
+  ["6425011089", "SSD-KING-NV2", "KINGSTON", 9830],
+  ["6425012207", "RT-TPLINK-AX55", "TP-LINK", 8420],
+  ["6425018854", "CAM-LOGI-C270", "LOGITECH", 7360],
 ];
 
-const buildReconcileRows = (mode = "Inbound") => RECONCILE_ITEM_CODES.map(([itemId, brand, base], idx) => {
-  const modeOffset = mode === "Outbound" ? -460 : mode === "Storage" ? 820 : 0;
+const buildReconcileRows = (mode = "Inbound") => RECONCILE_ITEM_CODES.map(([synnexId, itemId, brand, base], idx) => {
+  const modeOffset = mode === "Outbound" ? -460 : mode === "Inventory Onhand" ? 820 : 0;
   const days = RECONCILE_DATES.map((d, dayIdx) => {
     const d365 = base + modeOffset + ((dayIdx * 3 + idx) % 11) - 4;
     const diffSeed = ((idx + dayIdx * 2) % 9) - 4;
     const diff = diffSeed === 0 && (idx + dayIdx) % 3 === 0 ? 0 : diffSeed;
-    return { ...d, d365, wms: d365 - diff, diff };
+    const wms = d365 - diff;
+    const cycleDelta = ((idx * 2 + dayIdx) % 7) - 3;
+    const cycleCount = mode === "Inventory Onhand" ? wms + cycleDelta : null;
+    return { ...d, d365, wms, diff, cycleCount, diffD365Cycle: cycleCount == null ? null : d365 - cycleCount, diffWmsCycle: cycleCount == null ? null : wms - cycleCount };
   });
-  return { itemId, brand, days };
+  return { synnexId, itemId, brand, days };
 });
 
 function StockReconcile() {
   const [mode, setMode] = useState("Inbound");
   const [date, setDate] = useState("11 ก.ย.");
   const [q, setQ] = useState("");
-  const rows = buildReconcileRows(mode).filter((r) => `${r.itemId} ${r.brand}`.toLowerCase().includes(q.toLowerCase()));
+  const isOnhand = mode === "Inventory Onhand";
+  const rows = buildReconcileRows(mode).filter((r) => `${r.synnexId} ${r.itemId} ${r.brand}`.toLowerCase().includes(q.toLowerCase()));
   const diffs = rows.flatMap((r) => r.days.map((d) => d.diff));
   const positive = diffs.filter((d) => d > 0).length;
   const negative = diffs.filter((d) => d < 0).length;
@@ -2668,8 +2672,8 @@ function StockReconcile() {
       <div className="section-title">Stock Reconcile - D365 / WMS Diff Summary</div>
       <div className="grid g4" style={{ marginBottom: 14 }}>
         <LpCard icon={Boxes} label="SKU Reconciled" value={rows.length} sub={`${mode} · ${date}`} variant="info" />
-        <LpCard icon={AlertTriangle} label="D365 > WMS" value={positive} sub="ค่าบวก ต้องตรวจรับ/ตัดจ่าย" variant="plan" tone="amber" />
-        <LpCard icon={RefreshCw} label="D365 < WMS" value={negative} sub="ค่าลบ ต้องตรวจ WMS movement" variant="good" tone="green" />
+        <LpCard icon={AlertTriangle} label="D365 > WMS" value={positive} sub="Diff = D365 - WMS(Pandora)" variant="plan" tone="amber" />
+        <LpCard icon={RefreshCw} label="D365 < WMS" value={negative} sub={isOnhand ? "Onhand มี Daily Cycle Count" : "ค่าลบ ต้องตรวจ WMS movement"} variant="good" tone="green" />
         <LpCard icon={CheckCircle2} label="Matched / Total Diff" value={`${zero} / ${totalAbs}`} sub="ศูนย์ = ตรงกัน" variant="info" />
       </div>
       <div className="grid g2" style={{ marginBottom: 14 }}>
@@ -2689,18 +2693,18 @@ function StockReconcile() {
         <div className="card">
           <h3>Reconcile Control</h3>
           <div className="reconcile-control-row">
-            {["Inbound", "Outbound", "Storage"].map((m) => <button key={m} className={`btn secondary ${mode === m ? "active" : ""}`} onClick={() => setMode(m)}>{m}</button>)}
+            {["Inbound", "Outbound", "Inventory Onhand"].map((m) => <button key={m} className={`btn secondary ${mode === m ? "active" : ""}`} onClick={() => setMode(m)}>{m}</button>)}
             <select value={date} onChange={(e) => setDate(e.target.value)}>{RECONCILE_DATES.map((d) => <option key={d.label}>{d.label}</option>)}</select>
-            <div className="search-box reconcile-search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา Item ID / Brand..." /></div>
+            <div className="search-box reconcile-search"><Search size={15} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ค้นหา SYNNEX ID / Item ID / Brand..." /></div>
             <button className="btn"><FileText size={13} /> Export Summary</button>
           </div>
           <div className="reconcile-legend">
-            <span><i className="legend-dot plus" /> ค่าบวก: D365 มากกว่า WMS</span>
-            <span><i className="legend-dot minus" /> ค่าลบ: D365 น้อยกว่า WMS</span>
+            <span><i className="legend-dot plus" /> Diff บวก: D365 มากกว่า WMS(Pandora)</span>
+            <span><i className="legend-dot minus" /> Diff ลบ: D365 น้อยกว่า WMS(Pandora)</span>
             <span><i className="legend-dot zero" /> ศูนย์: ตรงกัน</span>
           </div>
           <div className="reconcile-note">
-            ใช้สำหรับเทียบยอดระบบต้นทางกับ WMS รายวัน แยกตาม Inbound / Outbound / Storage และใช้เป็นจุดเปิดงานตรวจสอบก่อนปรับปรุง Stock จริง
+            ใช้สำหรับเทียบยอดระบบต้นทางกับ WMS(Pandora) รายวัน แยกตาม Inbound / Outbound / Inventory Onhand โดย Onhand จะเพิ่ม Daily Cycle Count เพื่อเทียบยอดนับจริงกับ D365 และ WMS
           </div>
         </div>
       </div>
@@ -2709,23 +2713,30 @@ function StockReconcile() {
           <table className="reconcile-table">
             <thead>
               <tr>
+                <th rowSpan={2} className="sticky-col synnex">SYNNEX ID</th>
                 <th rowSpan={2} className="sticky-col item">Item ID</th>
                 <th rowSpan={2} className="sticky-col brand">Brand</th>
-                {RECONCILE_DATES.map((d) => <th key={d.label} colSpan={3}>{d.label}</th>)}
+                {RECONCILE_DATES.map((d) => <th key={d.label} colSpan={isOnhand ? 6 : 3}>{d.label}</th>)}
               </tr>
               <tr>
-                {RECONCILE_DATES.map((d) => <React.Fragment key={`${d.label}-sub`}><th>{d.erp}</th><th>WMS</th><th>Diff</th></React.Fragment>)}
+                {RECONCILE_DATES.map((d) => <React.Fragment key={`${d.label}-sub`}>
+                  <th>D365 Qty</th><th>WMS(Pandora)</th>{isOnhand && <th>Daily Cycle Count</th>}<th>Diff<br />D365-WMS</th>{isOnhand && <th>Diff<br />D365-Count</th>}{isOnhand && <th>Diff<br />WMS-Count</th>}
+                </React.Fragment>)}
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.itemId}>
+                <tr key={r.synnexId}>
+                  <td className="sticky-col synnex mono strong">{r.synnexId}</td>
                   <td className="sticky-col item mono strong">{r.itemId}</td>
                   <td className="sticky-col brand">{r.brand}</td>
                   {r.days.map((d) => <React.Fragment key={`${r.itemId}-${d.label}`}>
                     <td className="num">{d.d365.toLocaleString()}</td>
                     <td className="num">{d.wms.toLocaleString()}</td>
+                    {isOnhand && <td className="num cycle-count">{d.cycleCount.toLocaleString()}</td>}
                     <td className={diffClass(d.diff)}>{d.diff > 0 ? `+${d.diff}` : d.diff}</td>
+                    {isOnhand && <td className={diffClass(d.diffD365Cycle)}>{d.diffD365Cycle > 0 ? `+${d.diffD365Cycle}` : d.diffD365Cycle}</td>}
+                    {isOnhand && <td className={diffClass(d.diffWmsCycle)}>{d.diffWmsCycle > 0 ? `+${d.diffWmsCycle}` : d.diffWmsCycle}</td>}
                   </React.Fragment>)}
                 </tr>
               ))}
@@ -7846,7 +7857,7 @@ function GlobalStyle() {
       .reconcile-note{background:rgba(184,115,62,.1);border:1px solid rgba(184,115,62,.22);border-radius:10px;padding:10px 12px;color:#704522;font-size:12px;line-height:1.45;}
       .reconcile-panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;box-shadow:0 12px 30px rgba(22,35,61,.06);}
       .reconcile-table-scroll{max-height:620px;overflow:auto;border-radius:13px;border:1px solid var(--border);}
-      .reconcile-table{border-collapse:separate;border-spacing:0;min-width:1580px;width:100%;font-size:12px;background:#FFFDF9;}
+      .reconcile-table{border-collapse:separate;border-spacing:0;min-width:1900px;width:100%;font-size:12px;background:#FFFDF9;}
       .reconcile-table th{position:sticky;top:0;z-index:3;background:#E8D5C3;color:#6C4A31;border-right:1px solid #F5EFE8;border-bottom:1px solid #F5EFE8;text-align:center;padding:11px 10px;font-weight:900;white-space:nowrap;}
       .reconcile-table thead tr:nth-child(2) th{top:40px;background:#F2E5D8;}
       .reconcile-table td{border-right:1px solid #EEE5DC;border-bottom:1px solid #EEE5DC;padding:10px 12px;white-space:nowrap;background:#FFFCF8;}
@@ -7855,10 +7866,12 @@ function GlobalStyle() {
       .reconcile-table .strong{font-weight:900;color:#2B2F38;}
       .reconcile-table .sticky-col{position:sticky;z-index:2;}
       .reconcile-table th.sticky-col{z-index:4;}
-      .reconcile-table .sticky-col.item{left:0;min-width:190px;}
-      .reconcile-table .sticky-col.brand{left:190px;min-width:100px;}
-      .reconcile-table td.sticky-col.item,.reconcile-table td.sticky-col.brand{background:#FFF9F1;}
-      .reconcile-table tbody tr:nth-child(even) td.sticky-col.item,.reconcile-table tbody tr:nth-child(even) td.sticky-col.brand{background:#F8EFE5;}
+      .reconcile-table .sticky-col.synnex{left:0;min-width:120px;}
+      .reconcile-table .sticky-col.item{left:120px;min-width:190px;}
+      .reconcile-table .sticky-col.brand{left:310px;min-width:110px;}
+      .reconcile-table td.sticky-col.synnex,.reconcile-table td.sticky-col.item,.reconcile-table td.sticky-col.brand{background:#FFF9F1;}
+      .reconcile-table tbody tr:nth-child(even) td.sticky-col.synnex,.reconcile-table tbody tr:nth-child(even) td.sticky-col.item,.reconcile-table tbody tr:nth-child(even) td.sticky-col.brand{background:#F8EFE5;}
+      .reconcile-table .cycle-count{background:#EAF3FF!important;color:#183B6B;font-weight:900;}
       .reconcile-diff{text-align:center!important;font-family:'JetBrains Mono';font-weight:900;min-width:52px;}
       .reconcile-diff.plus{background:#F8E5A5!important;color:#6B4B00;}
       .reconcile-diff.minus{background:#D8EDC6!important;color:#1C6633;}
