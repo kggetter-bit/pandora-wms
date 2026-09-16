@@ -2715,10 +2715,11 @@ function StockReconcile() {
               <tr>
                 <th rowSpan={2} className="sticky-col synnex">SYNNEX ID</th>
                 <th rowSpan={2} className="sticky-col item">Item ID</th>
-                <th rowSpan={2} className="sticky-col brand">Brand</th>
+                <th className="sticky-col brand">Brand</th>
                 {RECONCILE_DATES.map((d) => <th key={d.label} colSpan={isOnhand ? 6 : 3}>{d.label}</th>)}
               </tr>
               <tr>
+                <th className="sticky-col brand">Brand</th>
                 {RECONCILE_DATES.map((d) => <React.Fragment key={`${d.label}-sub`}>
                   <th>D365 Qty</th><th>WMS(Pandora)</th>{isOnhand && <th>Daily Cycle Count</th>}<th>Diff<br />D365-WMS</th>{isOnhand && <th>Diff<br />D365-Count</th>}{isOnhand && <th>Diff<br />WMS-Count</th>}
                 </React.Fragment>)}
@@ -7847,21 +7848,21 @@ function GlobalStyle() {
       .badge{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;}
       .badge.A{background:rgba(241,91,113,0.24);color:var(--danger);} .badge.B{background:rgba(62,126,224,0.24);color:var(--amber);} .badge.C{background:rgba(139,150,165,0.24);color:var(--muted);}
       .reconcile-control-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0 12px;}
-      .reconcile-control-row .btn.active{background:#B8733E;color:#FFFFFF;border-color:#B8733E;}
+      .reconcile-control-row .btn.active{background:var(--navy);color:#FFFFFF;border-color:var(--navy);}
       .reconcile-control-row select{height:38px;border:1px solid var(--border);border-radius:8px;background:var(--panel-raised);padding:0 12px;font-family:'Sarabun';font-size:13px;color:var(--text);}
       .reconcile-search{margin:0;min-width:270px;max-width:360px;flex:1;}
       .reconcile-legend{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 12px;color:var(--muted);font-size:12px;font-weight:700;}
       .reconcile-legend span{display:inline-flex;align-items:center;gap:7px;}
       .legend-dot{width:10px;height:10px;border-radius:999px;display:inline-block;}
-      .legend-dot.plus{background:#F7E5A5;}.legend-dot.minus{background:#D8EDC6;}.legend-dot.zero{background:#ECE8E2;}
-      .reconcile-note{background:rgba(184,115,62,.1);border:1px solid rgba(184,115,62,.22);border-radius:10px;padding:10px 12px;color:#704522;font-size:12px;line-height:1.45;}
+      .legend-dot.plus{background:#F8E5A5;}.legend-dot.minus{background:#FAD5DD;}.legend-dot.zero{background:#DDF7EA;}
+      .reconcile-note{background:rgba(62,126,224,.08);border:1px solid rgba(62,126,224,.22);border-radius:10px;padding:10px 12px;color:var(--navy);font-size:12px;line-height:1.45;}
       .reconcile-panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;box-shadow:0 12px 30px rgba(22,35,61,.06);}
       .reconcile-table-scroll{max-height:620px;overflow:auto;border-radius:13px;border:1px solid var(--border);}
-      .reconcile-table{border-collapse:separate;border-spacing:0;min-width:1900px;width:100%;font-size:12px;background:#FFFDF9;}
-      .reconcile-table th{position:sticky;top:0;z-index:3;background:#E8D5C3;color:#6C4A31;border-right:1px solid #F5EFE8;border-bottom:1px solid #F5EFE8;text-align:center;padding:11px 10px;font-weight:900;white-space:nowrap;}
-      .reconcile-table thead tr:nth-child(2) th{top:40px;background:#F2E5D8;}
-      .reconcile-table td{border-right:1px solid #EEE5DC;border-bottom:1px solid #EEE5DC;padding:10px 12px;white-space:nowrap;background:#FFFCF8;}
-      .reconcile-table tbody tr:nth-child(even) td{background:#FBF4EC;}
+      .reconcile-table{border-collapse:separate;border-spacing:0;min-width:1900px;width:100%;font-size:12px;background:var(--panel);}
+      .reconcile-table th{position:sticky;top:0;z-index:3;background:var(--navy);color:#FFFFFF;border-right:1px solid rgba(255,255,255,.16);border-bottom:1px solid rgba(255,255,255,.18);text-align:center;padding:11px 10px;font-weight:900;white-space:nowrap;}
+      .reconcile-table thead tr:nth-child(2) th{top:40px;background:#EAF1FB;color:var(--navy);border-color:var(--border);}
+      .reconcile-table td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:10px 12px;white-space:nowrap;background:#FFFFFF;}
+      .reconcile-table tbody tr:nth-child(even) td{background:#F6FAFF;}
       .reconcile-table .num{text-align:right;font-family:'JetBrains Mono';font-size:12px;}
       .reconcile-table .strong{font-weight:900;color:#2B2F38;}
       .reconcile-table .sticky-col{position:sticky;z-index:2;}
@@ -7869,13 +7870,13 @@ function GlobalStyle() {
       .reconcile-table .sticky-col.synnex{left:0;min-width:120px;}
       .reconcile-table .sticky-col.item{left:120px;min-width:190px;}
       .reconcile-table .sticky-col.brand{left:310px;min-width:110px;}
-      .reconcile-table td.sticky-col.synnex,.reconcile-table td.sticky-col.item,.reconcile-table td.sticky-col.brand{background:#FFF9F1;}
-      .reconcile-table tbody tr:nth-child(even) td.sticky-col.synnex,.reconcile-table tbody tr:nth-child(even) td.sticky-col.item,.reconcile-table tbody tr:nth-child(even) td.sticky-col.brand{background:#F8EFE5;}
+      .reconcile-table td.sticky-col.synnex,.reconcile-table td.sticky-col.item,.reconcile-table td.sticky-col.brand{background:#FFFFFF;}
+      .reconcile-table tbody tr:nth-child(even) td.sticky-col.synnex,.reconcile-table tbody tr:nth-child(even) td.sticky-col.item,.reconcile-table tbody tr:nth-child(even) td.sticky-col.brand{background:#F6FAFF;}
       .reconcile-table .cycle-count{background:#EAF3FF!important;color:#183B6B;font-weight:900;}
       .reconcile-diff{text-align:center!important;font-family:'JetBrains Mono';font-weight:900;min-width:52px;}
       .reconcile-diff.plus{background:#F8E5A5!important;color:#6B4B00;}
-      .reconcile-diff.minus{background:#D8EDC6!important;color:#1C6633;}
-      .reconcile-diff.zero{background:#EEEAE4!important;color:#80746A;}
+      .reconcile-diff.minus{background:#FAD5DD!important;color:#B4233A;}
+      .reconcile-diff.zero{background:#DDF7EA!important;color:#137A48;}
       .search-box{display:flex;align-items:center;gap:8px;background:var(--panel-raised);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:14px;max-width:340px;}
       .search-box input{background:none;border:none;outline:none;color:var(--text);font-size:13px;width:100%;font-family:'Sarabun';}
       .tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
